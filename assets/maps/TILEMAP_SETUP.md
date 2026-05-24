@@ -1,6 +1,6 @@
 # TileMap setup
 
-Use `level_1.tmx` as the first playable map.
+Use `level_1V1.tmx` as the current first playable map.
 
 ## Tiled settings
 
@@ -22,8 +22,8 @@ Add one point object in `objects`:
 
 ## Cocos Creator scene wiring
 
-1. Import `assets/maps/level_1.tmx`.
-2. Add a `TiledMap` node to `scene-2d` and assign `level_1.tmx`.
+1. Import `assets/maps/level_1V1.tmx`.
+2. Add a `TiledMap` node to `scene-2d` and assign `level_1V1.tmx`.
 3. Add an empty node named `LevelRoot`.
 4. Add `TileMapLevelLoader` to a scene node, then assign:
    - `Tiled Map`: the `TiledMap` component
@@ -38,9 +38,14 @@ Add one point object in `objects`:
    - `Use Tmx Spawn Position`: unchecked while debugging editor-visible Player
    - `Spawn Lift`: `24`
    - `Show Player Debug Marker`: checked while debugging
-5. Press Play. The loader enables 2D physics, creates solid colliders from the `solid` layer, and spawns the player at `player_spawn`.
-6. Click the Preview/Game view once before pressing WASD so the browser/canvas has keyboard focus.
+5. Create or select `Canvas/LevelRoot/Player`, then add fixed player components:
+   - `RigidBody2D`: Type `Dynamic`, Fixed Rotation checked, Gravity Scale `1`
+   - `BoxCollider2D`: Size `28 x 30`, Offset `0 x 15`
+   - `PlayerController`: Movement Mode `kinematic`
+   - Keep `Player` Mobility set to `Movable`
+6. Press Play. The loader enables 2D physics, creates solid colliders from the `solid` layer, and uses the existing `Player` node.
+7. Click the Preview/Game view once before pressing WASD so the browser/canvas has keyboard focus.
 
-For editor-visible Player setup, create a node named `Player` under `Canvas/LevelRoot` with `UITransform`, `Sprite`, and optionally `PlayerController`. The loader uses this existing node before trying `Player Prefab` or dynamic fallback. Keep `PlayerController.Enable Physics` unchecked until basic WASD movement is visible.
+For editor-visible Player setup, create a node named `Player` under `Canvas/LevelRoot`. The root should own `RigidBody2D`, `BoxCollider2D`, and `PlayerController`; `Player/Visual` should own the Mario `Sprite`. The loader uses this existing node before trying `Player Prefab` or dynamic fallback.
 
 If the player is not visible, open Console and check the `[TileMapLevelLoader] Spawned Player` log. Confirm the `mapBottomLeft` and final player `world` position look close to the visible floor. If `sprite=missing-fallback`, assign a Mario frame to `Player Sprite`; the red debug marker should still be visible while debugging.

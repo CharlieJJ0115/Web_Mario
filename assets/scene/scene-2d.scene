@@ -370,7 +370,7 @@
       "__id__": 5
     },
     "_children": [],
-    "_active": true,
+    "_active": false,
     "_components": [
       {
         "__id__": 10
@@ -462,7 +462,7 @@
       "__id__": 5
     },
     "_children": [],
-    "_active": true,
+    "_active": false,
     "_components": [
       {
         "__id__": 13
@@ -568,7 +568,7 @@
     "_enabled": true,
     "__prefab": null,
     "_tmxFile": {
-      "__uuid__": "8279d1a8-ccdf-4f95-801e-00a9b35f69d5",
+      "__uuid__": "e49f0123-66d8-4668-8d7c-b4025236f8e4",
       "__expectedType__": "cc.TiledMapAsset"
     },
     "_enableCulling": true,
@@ -648,8 +648,8 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -17.173,
-      "y": -14.905,
+      "x": 55.434,
+      "y": 126.201,
       "z": 0
     },
     "_lrot": {
@@ -665,7 +665,7 @@
       "y": 1,
       "z": 1
     },
-    "_mobility": 0,
+    "_mobility": 2,
     "_layer": 33554432,
     "_euler": {
       "__type__": "cc.Vec3",
@@ -756,9 +756,12 @@
       "x": 28,
       "y": 30
     },
-    "enablePhysics": false,
     "debugInput": true,
     "useBrowserKeyboardFallback": true,
+    "fallResetY": -300,
+    "fallResetDistance": 160,
+    "debugPhysicsPosition": false,
+    "visualNodeName": "Visual",
     "_id": "f1EI8RmuFAUIat2MBzYVKz"
   },
   {
@@ -878,6 +881,7 @@
     "solidLayerName": "solid",
     "objectLayerName": "objects",
     "existingPlayerName": "Player",
+    "playerVisualName": "Visual",
     "useTmxSpawnPosition": false,
     "spawnObjectName": "player_spawn",
     "gravityY": -960,
@@ -890,7 +894,16 @@
       "y": 80
     },
     "spawnLift": 24,
-    "showPlayerDebugMarker": true,
+    "showPlayerDebugMarker": false,
+    "showSolidColliderDebug": false,
+    "hideSolidLayerOnStart": true,
+    "createDebugGround": false,
+    "debugGroundSize": {
+      "__type__": "cc.Vec2",
+      "x": 320,
+      "y": 16
+    },
+    "debugGroundOffsetY": -8,
     "_id": "0bvH8Ez6dHhInzjBn4Iz/U"
   },
   {

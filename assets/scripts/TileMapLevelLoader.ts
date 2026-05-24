@@ -11,6 +11,7 @@ import {
     Graphics,
     instantiate,
     Prefab,
+    Size,
     Sprite,
     SpriteFrame,
     TiledLayer,
@@ -59,6 +60,9 @@ export class TileMapLevelLoader extends Component {
     public existingPlayerName = 'Player';
 
     @property
+    public playerVisualName = 'Visual';
+
+    @property
     public useTmxSpawnPosition = false;
 
     @property
@@ -83,7 +87,22 @@ export class TileMapLevelLoader extends Component {
     public spawnLift = 24;
 
     @property
-    public showPlayerDebugMarker = true;
+    public showPlayerDebugMarker = false;
+
+    @property
+    public showSolidColliderDebug = false;
+
+    @property
+    public hideSolidLayerOnStart = true;
+
+    @property
+    public createDebugGround = false;
+
+    @property(Vec2)
+    public debugGroundSize = new Vec2(320, 16);
+
+    @property
+    public debugGroundOffsetY = -8;
 
     private player: Node | null = null;
     private mapPixelSize = new Vec2();
@@ -125,6 +144,11 @@ export class TileMapLevelLoader extends Component {
         const mapSize = this.tiledMap.getMapSize();
         const tileSize = this.tiledMap.getTileSize();
         this.mapPixelSize.set(mapSize.width * tileSize.width, mapSize.height * tileSize.height);
+
+        console.log(
+            `[TileMapLevelLoader] Map loaded size=${mapSize.width}x${mapSize.height} `
+            + `tile=${tileSize.width}x${tileSize.height} pixels=${this.mapPixelSize.x}x${this.mapPixelSize.y}`,
+        );
     }
 
     private buildSolidColliders(): void {
@@ -140,6 +164,7 @@ export class TileMapLevelLoader extends Component {
 
         const mapSize = this.tiledMap.getMapSize();
         const tileSize = this.tiledMap.getTileSize();
+        let colliderCount = 0;
 
         for (let y = 0; y < mapSize.height; y += 1) {
             for (let x = 0; x < mapSize.width; x += 1) {
@@ -148,8 +173,23 @@ export class TileMapLevelLoader extends Component {
                     continue;
                 }
                 this.createStaticTileCollider(solidLayer, x, y, tileSize.width, tileSize.height);
+                colliderCount += 1;
             }
         }
+
+        if (this.hideSolidLayerOnStart) {
+            solidLayer.node.active = false;
+        }
+
+        if (colliderCount === 0) {
+            console.error(`[TileMapLevelLoader] Solid layer "${this.solidLayerName}" generated 0 colliders. Player will fall through the map.`);
+            return;
+        }
+
+        console.log(
+            `[TileMapLevelLoader] Solid layer "${this.solidLayerName}" generated ${colliderCount} colliders `
+            + `debug=${this.showSolidColliderDebug} hiddenLayer=${this.hideSolidLayerOnStart}`,
+        );
     }
 
     private createStaticTileCollider(
@@ -172,10 +212,27 @@ export class TileMapLevelLoader extends Component {
         body.type = ERigidBody2DType.Static;
 
         const collider = colliderNode.addComponent(BoxCollider2D);
-        collider.size = new Vec2(tileWidth, tileHeight);
+        collider.size = new Size(tileWidth, tileHeight);
         collider.friction = 0;
         collider.restitution = 0;
         collider.apply();
+
+        if (this.showSolidColliderDebug) {
+            this.createSolidColliderDebugGraphic(colliderNode, tileWidth, tileHeight);
+        }
+    }
+
+    private createSolidColliderDebugGraphic(colliderNode: Node, tileWidth: number, tileHeight: number): void {
+        const transform = colliderNode.addComponent(UITransform);
+        transform.setContentSize(tileWidth, tileHeight);
+
+        const graphics = colliderNode.addComponent(Graphics);
+        graphics.strokeColor = new Color(0, 255, 80, 220);
+        graphics.fillColor = new Color(0, 255, 80, 45);
+        graphics.lineWidth = 1;
+        graphics.rect(-tileWidth * 0.5, -tileHeight * 0.5, tileWidth, tileHeight);
+        graphics.fill();
+        graphics.stroke();
     }
 
     private spawnPlayer(): void {
@@ -204,6 +261,7 @@ export class TileMapLevelLoader extends Component {
         this.ensurePlayerController(playerNode);
         this.ensurePlayerDebugMarker(playerNode);
         this.player = playerNode;
+        this.createDebugGroundBelowPlayer(playerNode);
         const mapBottomLeft = this.getMapBottomLeftWorld();
         console.log(
             `[TileMapLevelLoader] Spawned Player world=(${playerNode.worldPosition.x.toFixed(1)}, ${playerNode.worldPosition.y.toFixed(1)}, ${playerNode.worldPosition.z.toFixed(1)}) `
@@ -211,9 +269,53 @@ export class TileMapLevelLoader extends Component {
             + `spawn=${spawnX === null || spawnY === null ? 'editor-position' : `(${spawnX.toFixed(1)}, ${spawnY.toFixed(1)})`} `
             + `mapBottomLeft=(${mapBottomLeft.x.toFixed(1)}, ${mapBottomLeft.y.toFixed(1)}) `
             + `source=${source} useTmxSpawnPosition=${this.useTmxSpawnPosition} `
-            + `sprite=${this.playerSprite || playerNode.getComponent(Sprite)?.spriteFrame ? 'assigned' : 'missing-fallback'}`,
+            + `sprite=${this.getPlayerVisualSprite(playerNode)?.spriteFrame ? 'assigned' : 'missing-fallback'}`,
         );
         this.followPlayer();
+    }
+
+    private createDebugGroundBelowPlayer(playerNode: Node): void {
+        if (!this.createDebugGround || !this.levelRoot) {
+            return;
+        }
+
+        const existing = this.levelRoot.getChildByName('DebugGround');
+        if (existing) {
+            existing.destroy();
+        }
+
+        const groundNode = new Node('DebugGround');
+        this.levelRoot.addChild(groundNode);
+        groundNode.setWorldPosition(
+            playerNode.worldPosition.x + this.debugGroundSize.x * 0.5 - 48,
+            playerNode.worldPosition.y - this.debugGroundSize.y * 0.5 - 2,
+            0,
+        );
+
+        const body = groundNode.addComponent(RigidBody2D);
+        body.type = ERigidBody2DType.Static;
+
+        const collider = groundNode.addComponent(BoxCollider2D);
+        collider.size = new Size(this.debugGroundSize.x, this.debugGroundSize.y);
+        collider.friction = 0;
+        collider.restitution = 0;
+        collider.apply();
+
+        const transform = groundNode.addComponent(UITransform);
+        transform.setContentSize(this.debugGroundSize.x, this.debugGroundSize.y);
+
+        const graphics = groundNode.addComponent(Graphics);
+        graphics.fillColor = new Color(255, 64, 0, 110);
+        graphics.strokeColor = new Color(255, 255, 0, 240);
+        graphics.lineWidth = 2;
+        graphics.rect(-this.debugGroundSize.x * 0.5, -this.debugGroundSize.y * 0.5, this.debugGroundSize.x, this.debugGroundSize.y);
+        graphics.fill();
+        graphics.stroke();
+
+        console.log(
+            `[TileMapLevelLoader] DebugGround created world=(${groundNode.worldPosition.x.toFixed(1)}, ${groundNode.worldPosition.y.toFixed(1)}, ${groundNode.worldPosition.z.toFixed(1)}) `
+            + `size=${this.debugGroundSize.x}x${this.debugGroundSize.y}`,
+        );
     }
 
     private resolvePlayerNode(): { node: Node; source: 'existing' | 'prefab' | 'dynamic' } {
@@ -239,27 +341,106 @@ export class TileMapLevelLoader extends Component {
     }
 
     private ensurePlayerRenderable(playerNode: Node): void {
+        const visualNode = this.ensurePlayerVisualNode(playerNode);
+        const rootSprite = playerNode.getComponent(Sprite);
+        const rootSpriteFrame = rootSprite?.spriteFrame ?? null;
+        if (rootSprite) {
+            rootSprite.spriteFrame = null;
+            rootSprite.enabled = false;
+        }
+
         let transform = playerNode.getComponent(UITransform);
         if (!transform) {
             transform = playerNode.addComponent(UITransform);
         }
         transform.setContentSize(32, 32);
 
-        let sprite = playerNode.getComponent(Sprite);
+        let visualTransform = visualNode.getComponent(UITransform);
+        if (!visualTransform) {
+            visualTransform = visualNode.addComponent(UITransform);
+        }
+        visualTransform.setContentSize(32, 32);
+
+        let sprite = visualNode.getComponent(Sprite);
         if (!sprite) {
-            sprite = playerNode.addComponent(Sprite);
+            sprite = visualNode.addComponent(Sprite);
         }
 
-        if (!sprite.spriteFrame && this.playerSprite) {
+        if (sprite.spriteFrame && this.isSuspiciouslyLargeSpriteFrame(sprite.spriteFrame, 'Visual spriteFrame')) {
+            sprite.spriteFrame = null;
+        }
+
+        if (!sprite.spriteFrame && rootSpriteFrame && !this.isSuspiciouslyLargeSpriteFrame(rootSpriteFrame, 'Root spriteFrame')) {
+            sprite.spriteFrame = rootSpriteFrame;
+        }
+
+        if (!sprite.spriteFrame && this.playerSprite && !this.isSuspiciouslyLargeSpriteFrame(this.playerSprite, 'TileMapLevelLoader.playerSprite')) {
             sprite.spriteFrame = this.playerSprite;
         }
 
         if (!sprite.spriteFrame) {
             sprite.enabled = false;
-            this.createPlayerFallbackGraphic(playerNode);
+            this.createPlayerFallbackGraphic(visualNode);
         } else {
             sprite.enabled = true;
         }
+
+        console.log(`[TileMapLevelLoader] Player Visual spriteFrame=${sprite.spriteFrame ? 'assigned' : 'missing'}`);
+    }
+
+    private isSuspiciouslyLargeSpriteFrame(spriteFrame: SpriteFrame, label: string): boolean {
+        const size = this.getSpriteFrameDebugSize(spriteFrame);
+        if (!size) {
+            return false;
+        }
+
+        const suspicious = size.width > 96 || size.height > 96;
+        if (suspicious) {
+            console.warn(
+                `[TileMapLevelLoader] ${label} is ${size.width}x${size.height}, which looks like a sheet/atlas region. `
+                + 'Use a single frame such as mario_small_0.',
+            );
+        }
+        return suspicious;
+    }
+
+    private getSpriteFrameDebugSize(spriteFrame: SpriteFrame): { width: number; height: number } | null {
+        const frame = spriteFrame as unknown as {
+            width?: number;
+            height?: number;
+            rect?: { width?: number; height?: number };
+            originalSize?: { width?: number; height?: number };
+            getRect?: () => { width?: number; height?: number };
+            getOriginalSize?: () => { width?: number; height?: number };
+        };
+
+        const rect = frame.getRect?.() ?? frame.rect;
+        if (rect?.width && rect?.height) {
+            return { width: rect.width, height: rect.height };
+        }
+
+        const originalSize = frame.getOriginalSize?.() ?? frame.originalSize;
+        if (originalSize?.width && originalSize?.height) {
+            return { width: originalSize.width, height: originalSize.height };
+        }
+
+        if (frame.width && frame.height) {
+            return { width: frame.width, height: frame.height };
+        }
+
+        return null;
+    }
+
+    private ensurePlayerVisualNode(playerNode: Node): Node {
+        let visualNode = playerNode.getChildByName(this.playerVisualName);
+        if (!visualNode) {
+            visualNode = new Node(this.playerVisualName);
+            playerNode.addChild(visualNode);
+        }
+
+        visualNode.setPosition(0, 16, 0);
+        visualNode.active = true;
+        return visualNode;
     }
 
     private ensurePlayerController(playerNode: Node): void {
@@ -276,7 +457,7 @@ export class TileMapLevelLoader extends Component {
 
         const fallbackNode = new Node('PlayerFallbackGraphic');
         playerNode.addChild(fallbackNode);
-        fallbackNode.setPosition(0, 16, 0);
+        fallbackNode.setPosition(0, 0, 0);
 
         const transform = fallbackNode.addComponent(UITransform);
         transform.setContentSize(32, 32);
@@ -295,15 +476,17 @@ export class TileMapLevelLoader extends Component {
             return;
         }
 
-        if (playerNode.getChildByName('PlayerDebugMarker')) {
+        const visualNode = this.ensurePlayerVisualNode(playerNode);
+
+        if (visualNode.getChildByName('PlayerDebugMarker')) {
             return;
         }
 
         const markerNode = new Node('PlayerDebugMarker');
-        playerNode.addChild(markerNode);
+        visualNode.addChild(markerNode);
         const markerTransform = markerNode.addComponent(UITransform);
         markerTransform.setContentSize(40, 40);
-        markerNode.setPosition(0, 16, 0);
+        markerNode.setPosition(0, 0, 0);
 
         const graphics = markerNode.addComponent(Graphics);
         graphics.strokeColor = new Color(255, 0, 0, 255);
@@ -325,12 +508,16 @@ export class TileMapLevelLoader extends Component {
             return null;
         }
 
-        const objectByName = objectGroup.getObject(this.spawnObjectName) as TiledObject | null;
+        const objectByName = objectGroup.getObject(this.spawnObjectName) as unknown as TiledObject | null;
         if (objectByName) {
             return objectByName;
         }
 
-        return (objectGroup.getObjects() as TiledObject[]).find((object) => object.type === 'spawn') ?? null;
+        return ((objectGroup.getObjects() as unknown) as TiledObject[]).find((object) => object.type === 'spawn') ?? null;
+    }
+
+    private getPlayerVisualSprite(playerNode: Node): Sprite | null {
+        return playerNode.getChildByName(this.playerVisualName)?.getComponent(Sprite) ?? null;
     }
 
     private followPlayer(): void {
