@@ -859,6 +859,14 @@
     "visualOffsetY": 8,
     "groundSensorHeight": 3,
     "groundSensorOffsetY": -1,
+    "bigBodySize": {
+      "__type__": "cc.Vec2",
+      "x": 18,
+      "y": 27
+    },
+    "bigVisualOffsetY": 13.5,
+    "bigGroundSensorHeight": 3,
+    "bigGroundSensorOffsetY": -1,
     "idleFrames": [
       {
         "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@5d1d6",
@@ -888,6 +896,34 @@
     "fallFrames": [
       {
         "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@6895f",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ],
+    "bigIdleFrames": [
+      {
+        "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@98211",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ],
+    "bigWalkFrames": [
+      {
+        "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@2a04c",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@91a3b",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ],
+    "bigJumpFrames": [
+      {
+        "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@bcade",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ],
+    "bigFallFrames": [
+      {
+        "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@bcade",
         "__expectedType__": "cc.SpriteFrame"
       }
     ],

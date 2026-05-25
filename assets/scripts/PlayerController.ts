@@ -73,6 +73,18 @@ export class PlayerController extends Component {
     @property
     public groundSensorOffsetY = -1;
 
+    @property(Vec2)
+    public bigBodySize = new Vec2(18, 27);
+
+    @property
+    public bigVisualOffsetY = 13.5;
+
+    @property
+    public bigGroundSensorHeight = 3;
+
+    @property
+    public bigGroundSensorOffsetY = -1;
+
     @property([SpriteFrame])
     public idleFrames: SpriteFrame[] = [];
 
@@ -84,6 +96,18 @@ export class PlayerController extends Component {
 
     @property([SpriteFrame])
     public fallFrames: SpriteFrame[] = [];
+
+    @property([SpriteFrame])
+    public bigIdleFrames: SpriteFrame[] = [];
+
+    @property([SpriteFrame])
+    public bigWalkFrames: SpriteFrame[] = [];
+
+    @property([SpriteFrame])
+    public bigJumpFrames: SpriteFrame[] = [];
+
+    @property([SpriteFrame])
+    public bigFallFrames: SpriteFrame[] = [];
 
     @property
     public walkFrameInterval = 0.08;
@@ -113,9 +137,15 @@ export class PlayerController extends Component {
     private animationFrameIndex = 0;
     private animationElapsed = 0;
     private fallbackSpriteFrame: SpriteFrame | null = null;
+    private isBigMario = false;
+    private growQueued = false;
 
     public get isGrounded(): boolean {
         return this.groundedContacts > 0;
+    }
+
+    public get isBig(): boolean {
+        return this.isBigMario;
     }
 
     protected onLoad(): void {
@@ -137,6 +167,38 @@ export class PlayerController extends Component {
     public setFallResetY(resetY: number): void {
         this.fallResetY = resetY;
     }
+
+    public tryGrowBig(): boolean {
+        if (this.isBigMario || this.growQueued) {
+            return false;
+        }
+
+        this.growQueued = true;
+        this.scheduleOnce(this.applyGrowBig, 0);
+        return true;
+    }
+
+    private readonly applyGrowBig = (): void => {
+        this.growQueued = false;
+        if (this.isBigMario) {
+            return;
+        }
+
+        this.isBigMario = true;
+        this.bodySize.set(this.bigBodySize.x, this.bigBodySize.y);
+        this.visualOffsetY = this.bigVisualOffsetY;
+        this.groundSensorHeight = this.bigGroundSensorHeight;
+        this.groundSensorOffsetY = this.bigGroundSensorOffsetY;
+
+        const visual = this.resolveVisualNode();
+        visual.setPosition(0, this.visualOffsetY, 0);
+        this.configureColliderShapes();
+        this.resetAnimationPlayback();
+        this.updatePlayerAnimation(0);
+        this.updateColliderDebug();
+
+        console.log('[PlayerController] Mario grew into big Mario.');
+    };
 
     protected onDestroy(): void {
         input.off(Input.EventType.KEY_DOWN, this.onKeyDown, this);
@@ -208,6 +270,25 @@ export class PlayerController extends Component {
         this.body.fixedRotation = true;
         this.body.gravityScale = 1;
 
+        this.configureColliderShapes();
+        this.groundSensor.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+        this.groundSensor.on(Contact2DType.END_CONTACT, this.onEndContact, this);
+
+        this.physicsReady = true;
+        this.updateColliderDebug();
+        const groundSensorWidth = this.bodySize.x * 0.8;
+        console.log(
+            `[PlayerController] Physics components ready type=Dynamic fixedRotation=true gravityScale=1 `
+            + `colliderSize=${this.bodySize.x}x${this.bodySize.y} offset=(0, ${this.bodySize.y * 0.5}) `
+            + `groundSensor=${groundSensorWidth.toFixed(1)}x${this.groundSensorHeight} offset=(0, ${this.groundSensorOffsetY})`,
+        );
+    }
+
+    private configureColliderShapes(): void {
+        if (!this.mainCollider || !this.groundSensor) {
+            return;
+        }
+
         this.mainCollider.sensor = false;
         this.mainCollider.size = new Size(this.bodySize.x, this.bodySize.y);
         this.mainCollider.offset = new Vec2(0, this.bodySize.y * 0.5);
@@ -224,16 +305,6 @@ export class PlayerController extends Component {
         this.groundSensor.friction = 0;
         this.groundSensor.restitution = 0;
         this.groundSensor.apply();
-        this.groundSensor.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
-        this.groundSensor.on(Contact2DType.END_CONTACT, this.onEndContact, this);
-
-        this.physicsReady = true;
-        this.updateColliderDebug();
-        console.log(
-            `[PlayerController] Physics components ready type=Dynamic fixedRotation=true gravityScale=1 `
-            + `colliderSize=${this.bodySize.x}x${this.bodySize.y} offset=(0, ${this.bodySize.y * 0.5}) `
-            + `groundSensor=${groundSensorWidth.toFixed(1)}x${this.groundSensorHeight} offset=(0, ${this.groundSensorOffsetY})`,
-        );
     }
 
     private canJump(): boolean {
@@ -359,6 +430,17 @@ export class PlayerController extends Component {
     }
 
     private getFramesForAnimationState(state: PlayerAnimationState): SpriteFrame[] {
+        if (this.isBigMario) {
+            const bigFrames = this.getBigFramesForAnimationState(state);
+            if (bigFrames.length > 0) {
+                return bigFrames;
+            }
+        }
+
+        return this.getSmallFramesForAnimationState(state);
+    }
+
+    private getSmallFramesForAnimationState(state: PlayerAnimationState): SpriteFrame[] {
         switch (state) {
             case 'walk':
                 return this.walkFrames;
@@ -369,6 +451,20 @@ export class PlayerController extends Component {
             case 'idle':
             default:
                 return this.idleFrames;
+        }
+    }
+
+    private getBigFramesForAnimationState(state: PlayerAnimationState): SpriteFrame[] {
+        switch (state) {
+            case 'walk':
+                return this.bigWalkFrames;
+            case 'jump':
+                return this.bigJumpFrames;
+            case 'fall':
+                return this.bigFallFrames;
+            case 'idle':
+            default:
+                return this.bigIdleFrames;
         }
     }
 
@@ -385,6 +481,12 @@ export class PlayerController extends Component {
         if (!this.fallbackSpriteFrame && this.visualSprite?.spriteFrame) {
             this.fallbackSpriteFrame = this.visualSprite.spriteFrame;
         }
+    }
+
+    private resetAnimationPlayback(): void {
+        this.animationState = 'idle';
+        this.animationFrameIndex = 0;
+        this.animationElapsed = 0;
     }
 
     private resetAfterFall(): void {

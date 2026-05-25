@@ -2,7 +2,9 @@ import {
     _decorator,
     BoxCollider2D,
     Camera,
+    Collider2D,
     Component,
+    Contact2DType,
     ERigidBody2DType,
     RigidBody2D,
     Size,
@@ -10,6 +12,7 @@ import {
     UITransform,
     Vec2,
 } from 'cc';
+import { PlayerController } from './PlayerController';
 
 const { ccclass, property } = _decorator;
 
@@ -32,9 +35,14 @@ export class MushroomController extends Component {
 
     private body: RigidBody2D | null = null;
     private collider: BoxCollider2D | null = null;
+    private consumed = false;
 
     protected onLoad(): void {
         this.setupComponents();
+    }
+
+    protected onDestroy(): void {
+        this.collider?.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
     }
 
     protected update(): void {
@@ -58,6 +66,7 @@ export class MushroomController extends Component {
             this.body = this.node.addComponent(RigidBody2D);
         }
         this.body.type = ERigidBody2DType.Dynamic;
+        this.body.enabledContactListener = true;
         this.body.fixedRotation = true;
         this.body.gravityScale = 1;
 
@@ -68,10 +77,42 @@ export class MushroomController extends Component {
         this.collider.sensor = false;
         this.collider.size = new Size(this.bodySize.x, this.bodySize.y);
         this.collider.apply();
+        this.collider.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+        this.collider.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
     }
 
+    private onBeginContact(_selfCollider: Collider2D, otherCollider: Collider2D): void {
+        if (this.consumed) {
+            return;
+        }
+        if (otherCollider.sensor) {
+            return;
+        }
+
+        const player = otherCollider.node.getComponent(PlayerController);
+        if (!player) {
+            return;
+        }
+
+        this.consumed = true;
+        player.tryGrowBig();
+        this.hideImmediately();
+        this.scheduleOnce(this.destroyConsumedMushroom, 0);
+    }
+
+    private hideImmediately(): void {
+        const sprite = this.node.getComponent(Sprite);
+        if (sprite) {
+            sprite.enabled = false;
+        }
+    }
+
+    private readonly destroyConsumedMushroom = (): void => {
+        this.node.destroy();
+    };
+
     private applyMovement(): void {
-        if (!this.body) {
+        if (this.consumed || !this.body) {
             return;
         }
 
@@ -100,6 +141,10 @@ export class MushroomController extends Component {
     }
 
     private destroyIfOutOfFrame(): void {
+        if (this.consumed) {
+            return;
+        }
+
         const worldPosition = this.node.worldPosition;
         if (worldPosition.y < this.fallbackDestroyY) {
             this.node.destroy();
