@@ -15,6 +15,7 @@ import {
     RigidBody2D,
     Size,
     Sprite,
+    SpriteFrame,
     UITransform,
     Vec2,
     Vec3,
@@ -22,6 +23,8 @@ import {
 } from 'cc';
 
 const { ccclass, property } = _decorator;
+
+type PlayerAnimationState = 'idle' | 'walk' | 'jump' | 'fall';
 
 @ccclass('PlayerController')
 export class PlayerController extends Component {
@@ -61,6 +64,27 @@ export class PlayerController extends Component {
     @property
     public visualNodeName = 'Visual';
 
+    @property([SpriteFrame])
+    public idleFrames: SpriteFrame[] = [];
+
+    @property([SpriteFrame])
+    public walkFrames: SpriteFrame[] = [];
+
+    @property([SpriteFrame])
+    public jumpFrames: SpriteFrame[] = [];
+
+    @property([SpriteFrame])
+    public fallFrames: SpriteFrame[] = [];
+
+    @property
+    public walkFrameInterval = 0.08;
+
+    @property
+    public airFrameInterval = 0.12;
+
+    @property
+    public idleFrameInterval = 0.2;
+
     private body: RigidBody2D | null = null;
     private mainCollider: BoxCollider2D | null = null;
     private groundSensor: BoxCollider2D | null = null;
@@ -76,6 +100,10 @@ export class PlayerController extends Component {
     private physicsReady = false;
     private physicsLogElapsed = 0;
     private lastLoggedMoveAxis = Number.NaN;
+    private animationState: PlayerAnimationState = 'idle';
+    private animationFrameIndex = 0;
+    private animationElapsed = 0;
+    private fallbackSpriteFrame: SpriteFrame | null = null;
 
     public get isGrounded(): boolean {
         return this.groundedContacts > 0;
@@ -120,6 +148,7 @@ export class PlayerController extends Component {
     protected update(deltaTime: number): void {
         this.ensureVisible();
         this.applyPhysicsMovement();
+        this.updatePlayerAnimation(deltaTime);
         this.updateColliderDebug();
         this.monitorPhysicsPosition(deltaTime);
     }
@@ -257,6 +286,7 @@ export class PlayerController extends Component {
 
     private resolveVisualNode(): Node {
         if (this.visualNode && isValid(this.visualNode)) {
+            this.visualSprite = this.visualNode.getComponent(Sprite);
             return this.visualNode;
         }
 
@@ -269,8 +299,82 @@ export class PlayerController extends Component {
         visual.setPosition(0, 16, 0);
         this.visualNode = visual;
         this.visualSprite = visual.getComponent(Sprite);
+        this.captureFallbackSpriteFrame();
         console.log(`[PlayerController] Visual resolved spriteFrame=${this.visualSprite?.spriteFrame ? 'assigned' : 'missing'}`);
         return visual;
+    }
+
+    private updatePlayerAnimation(deltaTime: number): void {
+        this.resolveVisualNode();
+        this.captureFallbackSpriteFrame();
+
+        if (!this.visualSprite) {
+            return;
+        }
+
+        const nextState = this.getAnimationState();
+        if (nextState !== this.animationState) {
+            this.animationState = nextState;
+            this.animationFrameIndex = 0;
+            this.animationElapsed = 0;
+        }
+
+        const frames = this.getFramesForAnimationState(this.animationState);
+        if (frames.length === 0) {
+            if (!this.visualSprite.spriteFrame && this.fallbackSpriteFrame) {
+                this.visualSprite.spriteFrame = this.fallbackSpriteFrame;
+            }
+            return;
+        }
+
+        const frameInterval = this.getFrameInterval(this.animationState);
+        this.animationElapsed += deltaTime;
+        while (this.animationElapsed >= frameInterval) {
+            this.animationElapsed -= frameInterval;
+            this.animationFrameIndex = (this.animationFrameIndex + 1) % frames.length;
+        }
+
+        this.visualSprite.spriteFrame = frames[this.animationFrameIndex];
+    }
+
+    private getAnimationState(): PlayerAnimationState {
+        const velocity = this.body?.linearVelocity ?? new Vec2();
+        if (!this.isGrounded) {
+            return velocity.y > 0 ? 'jump' : 'fall';
+        }
+        if (this.moveAxis !== 0) {
+            return 'walk';
+        }
+        return 'idle';
+    }
+
+    private getFramesForAnimationState(state: PlayerAnimationState): SpriteFrame[] {
+        switch (state) {
+            case 'walk':
+                return this.walkFrames;
+            case 'jump':
+                return this.jumpFrames;
+            case 'fall':
+                return this.fallFrames;
+            case 'idle':
+            default:
+                return this.idleFrames;
+        }
+    }
+
+    private getFrameInterval(state: PlayerAnimationState): number {
+        const interval = state === 'walk'
+            ? this.walkFrameInterval
+            : state === 'idle'
+                ? this.idleFrameInterval
+                : this.airFrameInterval;
+        return Math.max(interval, 0.01);
+    }
+
+    private captureFallbackSpriteFrame(): void {
+        if (!this.fallbackSpriteFrame && this.visualSprite?.spriteFrame) {
+            this.fallbackSpriteFrame = this.visualSprite.spriteFrame;
+        }
     }
 
     private resetAfterFall(): void {

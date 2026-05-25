@@ -850,6 +850,41 @@
     "showColliderDebug": true,
     "showGroundSensorDebug": true,
     "visualNodeName": "Visual",
+    "idleFrames": [
+      {
+        "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@5d1d6",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ],
+    "walkFrames": [
+      {
+        "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@394d8",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@0998a",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@98859",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ],
+    "jumpFrames": [
+      {
+        "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@6895f",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ],
+    "fallFrames": [
+      {
+        "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@6895f",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ],
+    "walkFrameInterval": 0.16,
+    "airFrameInterval": 0.12,
+    "idleFrameInterval": 0.2,
     "_id": "f1EI8RmuFAUIat2MBzYVKz"
   },
   {
