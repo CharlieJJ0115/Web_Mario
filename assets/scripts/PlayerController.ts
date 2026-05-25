@@ -128,10 +128,9 @@ export class PlayerController extends Component {
     private visualSprite: Sprite | null = null;
     private fallResetPosition = new Vec3();
     private pressedKeys = new Set<KeyCode>();
-    private candidateOneWayPlatforms = new Map<OneWayPlatformController, number>();
+    private countedGroundContacts = new Set<Collider2D>();
     private moveAxis = 0;
-    private solidGroundedContacts = 0;
-    private oneWayGrounded = false;
+    private groundedContacts = 0;
     private jumpQueued = false;
     private physicsReady = false;
     private physicsLogElapsed = 0;
@@ -142,10 +141,9 @@ export class PlayerController extends Component {
     private fallbackSpriteFrame: SpriteFrame | null = null;
     private isBigMario = false;
     private growQueued = false;
-    private lastFootWorldY = Number.NaN;
 
     public get isGrounded(): boolean {
-        return this.solidGroundedContacts > 0 || this.oneWayGrounded;
+        return this.groundedContacts > 0;
     }
 
     public get isBig(): boolean {
@@ -238,15 +236,11 @@ export class PlayerController extends Component {
     }
 
     protected update(deltaTime: number): void {
-        if (Number.isNaN(this.lastFootWorldY)) {
-            this.lastFootWorldY = this.getFootWorldY();
-        }
         this.ensureVisible();
         this.applyPhysicsMovement();
         this.updatePlayerAnimation(deltaTime);
         this.updateColliderDebug();
         this.monitorPhysicsPosition(deltaTime);
-        this.lastFootWorldY = this.getFootWorldY();
     }
 
     private applyPhysicsMovement(): void {
@@ -264,13 +258,12 @@ export class PlayerController extends Component {
 
         if (this.jumpQueued && this.canJump()) {
             velocity.y = this.jumpSpeed;
-            this.solidGroundedContacts = 0;
-            this.oneWayGrounded = false;
+            this.countedGroundContacts.clear();
+            this.groundedContacts = 0;
         }
         this.jumpQueued = false;
 
         this.setBodyVelocity(velocity);
-        this.resolveOneWayPlatformLanding();
         this.updateFacing();
     }
 
@@ -298,8 +291,6 @@ export class PlayerController extends Component {
         this.body.gravityScale = 1;
 
         this.configureColliderShapes();
-        this.mainCollider.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
-        this.mainCollider.on(Contact2DType.END_CONTACT, this.onEndContact, this);
         this.groundSensor.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
         this.groundSensor.on(Contact2DType.END_CONTACT, this.onEndContact, this);
 
@@ -529,9 +520,8 @@ export class PlayerController extends Component {
         );
 
         this.setBodyVelocity(new Vec2(0, 0));
-        this.solidGroundedContacts = 0;
-        this.oneWayGrounded = false;
-        this.candidateOneWayPlatforms.clear();
+        this.countedGroundContacts.clear();
+        this.groundedContacts = 0;
         this.jumpQueued = false;
         this.node.setWorldPosition(this.fallResetPosition);
     }
@@ -551,7 +541,7 @@ export class PlayerController extends Component {
         console.log(
             `[PlayerController] physics pos=(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)}) `
             + `vel=(${velocity.x.toFixed(1)}, ${velocity.y.toFixed(1)}) moveAxis=${this.moveAxis} `
-            + `grounded=${this.isGrounded} solidGrounded=${this.solidGroundedContacts} oneWayGrounded=${this.oneWayGrounded}`,
+            + `grounded=${this.isGrounded} groundedContacts=${this.groundedContacts}`,
         );
     }
 
@@ -693,146 +683,42 @@ export class PlayerController extends Component {
     }
 
     private onBeginContact(selfCollider: Collider2D, otherCollider: Collider2D): void {
-        if (selfCollider !== this.groundSensor && selfCollider !== this.mainCollider) {
-            return;
-        }
-
-        const oneWayPlatform = this.getOneWayPlatformContact(otherCollider);
-        if (oneWayPlatform) {
-            this.addCandidateOneWayPlatform(oneWayPlatform);
-            this.resolveOneWayPlatformLanding();
-            return;
-        }
-
         if (selfCollider !== this.groundSensor) {
             return;
         }
-
         if (otherCollider.sensor) {
             return;
         }
+        if (!this.shouldCountGroundContact(otherCollider)) {
+            return;
+        }
 
-        this.solidGroundedContacts += 1;
+        this.countedGroundContacts.add(otherCollider);
+        this.groundedContacts = this.countedGroundContacts.size;
     }
 
     private onEndContact(selfCollider: Collider2D, otherCollider: Collider2D): void {
-        if (selfCollider !== this.groundSensor && selfCollider !== this.mainCollider) {
-            return;
-        }
-
-        const oneWayPlatform = this.getOneWayPlatformContact(otherCollider);
-        if (oneWayPlatform) {
-            this.removeCandidateOneWayPlatform(oneWayPlatform);
-            if (this.oneWayGrounded && !this.hasStandableOneWayPlatform()) {
-                this.oneWayGrounded = false;
-            }
-            return;
-        }
-
         if (selfCollider !== this.groundSensor) {
             return;
         }
-
         if (otherCollider.sensor) {
             return;
         }
 
-        this.solidGroundedContacts = Math.max(0, this.solidGroundedContacts - 1);
+        this.countedGroundContacts.delete(otherCollider);
+        this.groundedContacts = this.countedGroundContacts.size;
     }
 
-    private resolveOneWayPlatformLanding(): void {
-        const platform = this.findStandableOneWayPlatform();
-        if (!platform) {
-            this.oneWayGrounded = false;
-            return;
+    private shouldCountGroundContact(otherCollider: Collider2D): boolean {
+        const oneWayPlatform = otherCollider.node.getComponent(OneWayPlatformController);
+        if (!oneWayPlatform) {
+            return true;
         }
 
-        this.snapToOneWayPlatform(platform);
-    }
-
-    private findStandableOneWayPlatform(): OneWayPlatformController | null {
-        let bestPlatform: OneWayPlatformController | null = null;
-        let bestTopY = Number.NEGATIVE_INFINITY;
-
-        this.candidateOneWayPlatforms.forEach((_count, platform) => {
-            if (!isValid(platform.node) || !this.canLandOnOneWayPlatform(platform)) {
-                return;
-            }
-
-            const topY = platform.getPlatformTopWorldY();
-            if (topY > bestTopY) {
-                bestTopY = topY;
-                bestPlatform = platform;
-            }
-        });
-
-        return bestPlatform;
-    }
-
-    private hasStandableOneWayPlatform(): boolean {
-        return this.findStandableOneWayPlatform() !== null;
-    }
-
-    private canLandOnOneWayPlatform(platform: OneWayPlatformController): boolean {
-        const verticalVelocity = this.getVerticalVelocity();
-        if (verticalVelocity > 0) {
-            return false;
-        }
-
-        const platformTopY = platform.getPlatformTopWorldY();
-        const footY = this.getFootWorldY();
-        const lowerTolerance = Math.max(platform.surfaceTolerance, 8);
-        const crossedPlatformTop = this.lastFootWorldY >= platformTopY - platform.surfaceTolerance
-            && footY <= platformTopY + platform.surfaceTolerance;
-        const closeToPlatformTop = footY >= platformTopY - lowerTolerance
-            && footY <= platformTopY + Math.max(platform.surfaceTolerance, 4);
-        if (!crossedPlatformTop && !closeToPlatformTop) {
-            return false;
-        }
-
-        return platform.containsWorldX(this.node.worldPosition.x);
-    }
-
-    private snapToOneWayPlatform(platform: OneWayPlatformController): void {
-        if (!this.body) {
-            return;
-        }
-
-        const platformTopY = platform.getPlatformTopWorldY();
-        const targetWorldY = platformTopY - this.mainColliderOffsetBottom();
-        const current = this.node.worldPosition;
-        this.node.setWorldPosition(current.x, targetWorldY, current.z);
-        this.setBodyVelocity(new Vec2(this.body.linearVelocity.x, 0));
-        this.oneWayGrounded = true;
-    }
-
-    private mainColliderOffsetBottom(): number {
-        if (!this.mainCollider) {
-            return 0;
-        }
-
-        return this.mainCollider.offset.y - this.mainCollider.size.height * 0.5;
-    }
-
-    private getOneWayPlatformContact(otherCollider: Collider2D): OneWayPlatformController | null {
-        return otherCollider.node.getComponent(OneWayPlatformController);
-    }
-
-    private addCandidateOneWayPlatform(platform: OneWayPlatformController): void {
-        this.candidateOneWayPlatforms.set(
-            platform,
-            (this.candidateOneWayPlatforms.get(platform) ?? 0) + 1,
+        return this.canStandOnOneWayPlatform(
+            oneWayPlatform.getPlatformTopWorldY(),
+            oneWayPlatform.surfaceTolerance,
         );
-    }
-
-    private removeCandidateOneWayPlatform(platform: OneWayPlatformController): void {
-        const count = this.candidateOneWayPlatforms.get(platform) ?? 0;
-        if (count <= 1) {
-            this.candidateOneWayPlatforms.delete(platform);
-            return;
-        }
-
-        this.candidateOneWayPlatforms.set(platform, count - 1);
     }
 
     private updateFacing(): void {

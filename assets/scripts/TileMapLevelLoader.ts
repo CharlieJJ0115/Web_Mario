@@ -105,6 +105,9 @@ export class TileMapLevelLoader extends Component {
     public showSolidColliderDebug = false;
 
     @property
+    public oneWayFloorColliderHeight = 2;
+
+    @property
     public hideSolidLayerOnStart = true;
 
     @property
@@ -213,11 +216,12 @@ export class TileMapLevelLoader extends Component {
             const y = Number(floorObject.y ?? 0);
             const colliderNode = new Node(this.getOneWayFloorColliderNodeName(floorObject, colliderCount));
             this.levelRoot!.addChild(colliderNode);
-            const worldCenter = this.tiledRectObjectToWorldCenter(x, y, width, height);
+            const worldCenter = this.tiledOneWayFloorTopEdgeToWorldCenter(x, y, width);
             colliderNode.setWorldPosition(worldCenter);
-            this.configureOneWayFloorCollider(colliderNode, width, height);
+            this.configureOneWayFloorCollider(colliderNode, width, this.oneWayFloorColliderHeight);
             console.log(
                 `[TileMapLevelLoader] One-way floor ${colliderNode.name} raw=(${x.toFixed(1)}, ${y.toFixed(1)}, ${width.toFixed(1)}, ${height.toFixed(1)}) `
+                + `topCollider=${width.toFixed(1)}x${this.oneWayFloorColliderHeight.toFixed(1)} `
                 + `worldCenter=(${worldCenter.x.toFixed(1)}, ${worldCenter.y.toFixed(1)}, ${worldCenter.z.toFixed(1)})`,
             );
             colliderCount += 1;
@@ -372,14 +376,15 @@ export class TileMapLevelLoader extends Component {
         body.enabledContactListener = true;
 
         const collider = colliderNode.addComponent(BoxCollider2D);
-        collider.sensor = true;
+        collider.sensor = false;
         collider.size = new Size(width, height);
-        collider.density = 0;
+        collider.density = 1;
         collider.friction = 0;
         collider.restitution = 0;
         collider.apply();
 
         const oneWayPlatform = colliderNode.addComponent(OneWayPlatformController);
+        oneWayPlatform.topColliderHeight = height;
         oneWayPlatform.configure(collider.size);
 
         if (this.showSolidColliderDebug) {
@@ -777,6 +782,15 @@ export class TileMapLevelLoader extends Component {
         return new Vec3(
             bottomLeft.x + tiledX + width * 0.5,
             bottomLeft.y + tiledY - height * 0.5,
+            0,
+        );
+    }
+
+    private tiledOneWayFloorTopEdgeToWorldCenter(tiledX: number, tiledY: number, width: number): Vec3 {
+        const bottomLeft = this.getMapBottomLeftWorld();
+        return new Vec3(
+            bottomLeft.x + tiledX + width * 0.5,
+            bottomLeft.y + tiledY - this.oneWayFloorColliderHeight * 0.5,
             0,
         );
     }
