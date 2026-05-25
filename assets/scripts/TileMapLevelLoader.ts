@@ -19,6 +19,7 @@ import {
     Vec2,
     Vec3,
 } from 'cc';
+import { OneWayPlatformController } from './OneWayPlatformController';
 import { PlayerController } from './PlayerController';
 
 const { ccclass, property } = _decorator;
@@ -57,6 +58,9 @@ export class TileMapLevelLoader extends Component {
 
     @property
     public wallObjectLayerName = 'Walls';
+
+    @property
+    public floorObjectLayerName = 'Floor';
 
     @property
     public objectLayerName = 'objects';
@@ -165,16 +169,66 @@ export class TileMapLevelLoader extends Component {
         }
 
         const wallColliderCount = this.buildWallObjectColliders();
+        const floorColliderCount = this.buildOneWayFloorColliders();
         this.hideSolidLayerIfConfigured();
         if (wallColliderCount > 0) {
             console.log(
                 `[TileMapLevelLoader] Wall object layer "${this.wallObjectLayerName}" generated ${wallColliderCount} colliders `
-                + `debug=${this.showSolidColliderDebug}`,
+                + `oneWayFloors=${floorColliderCount} debug=${this.showSolidColliderDebug}`,
             );
             return;
         }
 
         this.buildSolidTileFallbackColliders();
+    }
+
+    private buildOneWayFloorColliders(): number {
+        if (!this.tiledMap || !this.levelRoot) {
+            return 0;
+        }
+
+        const floorGroup = this.tiledMap.getObjectGroup(this.floorObjectLayerName);
+        if (!floorGroup) {
+            console.warn(`[TileMapLevelLoader] Optional "${this.floorObjectLayerName}" object layer not found. Skipping one-way floors.`);
+            return 0;
+        }
+
+        const floorObjects = (floorGroup.getObjects() as unknown) as TiledObject[];
+        let colliderCount = 0;
+        let skippedCount = 0;
+
+        floorObjects.forEach((floorObject, index) => {
+            const width = Number(floorObject.width ?? 0);
+            const height = Number(floorObject.height ?? 0);
+            if (width <= 0 || height <= 0) {
+                skippedCount += 1;
+                console.warn(
+                    `[TileMapLevelLoader] Skipped one-way floor object ${this.describeTiledObject(floorObject, index)}. `
+                    + 'Only rectangle objects with positive width and height are supported.',
+                );
+                return;
+            }
+
+            const x = Number(floorObject.x ?? 0);
+            const y = Number(floorObject.y ?? 0);
+            const colliderNode = new Node(this.getOneWayFloorColliderNodeName(floorObject, colliderCount));
+            this.levelRoot!.addChild(colliderNode);
+            const worldCenter = this.tiledRectObjectToWorldCenter(x, y, width, height);
+            colliderNode.setWorldPosition(worldCenter);
+            this.configureOneWayFloorCollider(colliderNode, width, height);
+            console.log(
+                `[TileMapLevelLoader] One-way floor ${colliderNode.name} raw=(${x.toFixed(1)}, ${y.toFixed(1)}, ${width.toFixed(1)}, ${height.toFixed(1)}) `
+                + `worldCenter=(${worldCenter.x.toFixed(1)}, ${worldCenter.y.toFixed(1)}, ${worldCenter.z.toFixed(1)})`,
+            );
+            colliderCount += 1;
+        });
+
+        console.log(
+            `[TileMapLevelLoader] Floor object layer "${this.floorObjectLayerName}" generated ${colliderCount} one-way colliders `
+            + `(skipped=${skippedCount}) debug=${this.showSolidColliderDebug}`,
+        );
+
+        return colliderCount;
     }
 
     private buildWallObjectColliders(): number {
@@ -300,10 +354,33 @@ export class TileMapLevelLoader extends Component {
         body.type = ERigidBody2DType.Static;
 
         const collider = colliderNode.addComponent(BoxCollider2D);
+        collider.sensor = false;
         collider.size = new Size(width, height);
+        collider.density = 1;
         collider.friction = 0;
         collider.restitution = 0;
         collider.apply();
+
+        if (this.showSolidColliderDebug) {
+            this.createSolidColliderDebugGraphic(colliderNode, width, height);
+        }
+    }
+
+    private configureOneWayFloorCollider(colliderNode: Node, width: number, height: number): void {
+        const body = colliderNode.addComponent(RigidBody2D);
+        body.type = ERigidBody2DType.Static;
+        body.enabledContactListener = true;
+
+        const collider = colliderNode.addComponent(BoxCollider2D);
+        collider.sensor = true;
+        collider.size = new Size(width, height);
+        collider.density = 0;
+        collider.friction = 0;
+        collider.restitution = 0;
+        collider.apply();
+
+        const oneWayPlatform = colliderNode.addComponent(OneWayPlatformController);
+        oneWayPlatform.configure(collider.size);
 
         if (this.showSolidColliderDebug) {
             this.createSolidColliderDebugGraphic(colliderNode, width, height);
@@ -710,6 +787,14 @@ export class TileMapLevelLoader extends Component {
             : `${wallObject.id ?? 'rect'}`;
         const safeLabel = objectLabel.replace(/[^A-Za-z0-9_-]/g, '_');
         return `Wall_${index}_${safeLabel}`;
+    }
+
+    private getOneWayFloorColliderNodeName(floorObject: TiledObject, index: number): string {
+        const objectLabel = (floorObject.name && floorObject.name.trim().length > 0)
+            ? floorObject.name
+            : `${floorObject.id ?? 'rect'}`;
+        const safeLabel = objectLabel.replace(/[^A-Za-z0-9_-]/g, '_');
+        return `OneWayFloor_${index}_${safeLabel}`;
     }
 
     private describeTiledObject(wallObject: TiledObject, index: number): string {
