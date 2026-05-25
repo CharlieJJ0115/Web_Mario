@@ -4,7 +4,7 @@
   <image source="../AS2_source/effects_UI_tiles/tileset.png" width="688" height="450"/>
  </tileset>
  <imagelayer id="7" name="background" offsetx="1.33333" offsety="5.33333">
-  <image source="Level1_bgV2.png" width="960" height="320"/>
+  <image source="Level1_bgV3.png" width="960" height="320"/>
  </imagelayer>
  <layer id="1" name="terrain" width="60" height="20">
   <data encoding="csv">
