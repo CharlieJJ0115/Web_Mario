@@ -5,6 +5,7 @@ import {
     Component,
     Contact2DType,
     ERigidBody2DType,
+    Node,
     RigidBody2D,
     Size,
     Sprite,
@@ -13,6 +14,7 @@ import {
     UITransform,
     Vec3,
 } from 'cc';
+import { MushroomController } from './MushroomController';
 import { PlayerController } from './PlayerController';
 
 const { ccclass, property } = _decorator;
@@ -33,6 +35,21 @@ export class QuestionBlockController extends Component {
 
     @property
     public bounceDuration = 0.08;
+
+    @property
+    public spawnMushroom = true;
+
+    @property(SpriteFrame)
+    public mushroomSpriteFrame: SpriteFrame | null = null;
+
+    @property
+    public mushroomRiseHeight = 16;
+
+    @property
+    public mushroomRiseDuration = 0.35;
+
+    @property
+    public mushroomMoveSpeed = 3;
 
     private sprite: Sprite | null = null;
     private body: RigidBody2D | null = null;
@@ -137,6 +154,7 @@ export class QuestionBlockController extends Component {
     private activateBlock(): void {
         this.used = true;
         this.bouncing = true;
+        this.spawnMushroomFromBlock();
 
         if (this.sprite && this.usedFrame) {
             this.sprite.spriteFrame = this.usedFrame;
@@ -156,6 +174,46 @@ export class QuestionBlockController extends Component {
             .call(() => {
                 this.node.setPosition(originalPosition);
                 this.bouncing = false;
+            })
+            .start();
+    }
+
+    private spawnMushroomFromBlock(): void {
+        if (!this.spawnMushroom || !this.node.parent) {
+            return;
+        }
+
+        const mushroomNode = new Node('Mushroom');
+        this.node.parent.addChild(mushroomNode);
+
+        const blockPosition = this.node.position;
+        const startPosition = new Vec3(
+            blockPosition.x,
+            blockPosition.y,
+            blockPosition.z,
+        );
+        const endPosition = new Vec3(
+            blockPosition.x,
+            blockPosition.y + Math.max(this.mushroomRiseHeight, 0),
+            blockPosition.z,
+        );
+
+        mushroomNode.setPosition(startPosition);
+
+        const transform = mushroomNode.addComponent(UITransform);
+        transform.setContentSize(16, 16);
+
+        const sprite = mushroomNode.addComponent(Sprite);
+        if (this.mushroomSpriteFrame) {
+            sprite.spriteFrame = this.mushroomSpriteFrame;
+        }
+
+        tween(mushroomNode)
+            .to(Math.max(this.mushroomRiseDuration, 0.01), { position: endPosition })
+            .call(() => {
+                const mushroom = mushroomNode.addComponent(MushroomController);
+                mushroom.moveSpeed = this.mushroomMoveSpeed;
+                mushroom.startMoving();
             })
             .start();
     }

@@ -33,6 +33,9 @@ export class MushroomController extends Component {
     @property
     public fallbackDestroyY = -300;
 
+    @property
+    public movementEnabled = true;
+
     private body: RigidBody2D | null = null;
     private collider: BoxCollider2D | null = null;
     private consumed = false;
@@ -48,6 +51,10 @@ export class MushroomController extends Component {
     protected update(): void {
         this.applyMovement();
         this.destroyIfOutOfFrame();
+    }
+
+    public startMoving(): void {
+        this.movementEnabled = true;
     }
 
     private setupComponents(): void {
@@ -112,7 +119,7 @@ export class MushroomController extends Component {
     };
 
     private applyMovement(): void {
-        if (this.consumed || !this.body) {
+        if (this.consumed || !this.movementEnabled || !this.body) {
             return;
         }
 

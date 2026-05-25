@@ -739,8 +739,8 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 55.434,
-      "y": 126.201,
+      "x": 48.99,
+      "y": -9.127,
       "z": 0
     },
     "_lrot": {
@@ -840,7 +840,7 @@
     },
     "_enabled": true,
     "__prefab": null,
-    "moveSpeed": 10,
+    "moveSpeed": 3,
     "jumpSpeed": 13,
     "bodySize": {
       "__type__": "cc.Vec2",
@@ -857,7 +857,7 @@
     "showGroundSensorDebug": true,
     "visualNodeName": "Visual",
     "visualOffsetY": 8,
-    "groundSensorHeight": 3,
+    "groundSensorHeight": 5,
     "groundSensorOffsetY": -1,
     "bigBodySize": {
       "__type__": "cc.Vec2",
@@ -907,11 +907,11 @@
     ],
     "bigWalkFrames": [
       {
-        "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@2a04c",
+        "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@cae93",
         "__expectedType__": "cc.SpriteFrame"
       },
       {
-        "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@91a3b",
+        "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@5b9f6",
         "__expectedType__": "cc.SpriteFrame"
       }
     ],
@@ -927,7 +927,7 @@
         "__expectedType__": "cc.SpriteFrame"
       }
     ],
-    "walkFrameInterval": 0.16,
+    "walkFrameInterval": 0.12,
     "airFrameInterval": 0.12,
     "idleFrameInterval": 0.2,
     "_id": "f1EI8RmuFAUIat2MBzYVKz"
@@ -1040,6 +1040,14 @@
     "frameInterval": 0.12,
     "bounceHeight": 8,
     "bounceDuration": 0.08,
+    "spawnMushroom": true,
+    "mushroomSpriteFrame": {
+      "__uuid__": "ae8565eb-6372-4f5a-9c4c-51eafbd18b97@36a94",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "mushroomRiseHeight": 16,
+    "mushroomRiseDuration": 0.35,
+    "mushroomMoveSpeed": 3,
     "_id": "3dQDXqW3NDP5NOuzOHJ1Kz"
   },
   {
@@ -1114,8 +1122,8 @@
     "_prefab": null,
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 222.074,
-      "y": 46.711,
+      "x": 539.988,
+      "y": -14.509,
       "z": 0
     },
     "_lrot": {
@@ -1282,6 +1290,7 @@
       "__id__": 4
     },
     "fallbackDestroyY": -300,
+    "movementEnabled": true,
     "_id": "e8R242D9ZBubEE24+2SHPD"
   },
   {
