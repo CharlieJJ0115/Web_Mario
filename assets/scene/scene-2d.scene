@@ -687,8 +687,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 16,
-      "height": 16
+      "width": 19,
+      "height": 26
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -718,7 +718,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@ccc93",
+      "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@f8ed8",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -734,7 +734,7 @@
     "_isTrimmedMode": true,
     "_useGrayscale": false,
     "_atlas": {
-      "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1",
+      "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35",
       "__expectedType__": "cc.SpriteAtlas"
     },
     "_id": "69fQUF/utIAo2WokMvawtH"
@@ -749,8 +749,8 @@
     },
     "_enabled": true,
     "__prefab": null,
-    "moveSpeed": 240,
-    "jumpSpeed": 420,
+    "moveSpeed": 10,
+    "jumpSpeed": 13,
     "bodySize": {
       "__type__": "cc.Vec2",
       "x": 28,
