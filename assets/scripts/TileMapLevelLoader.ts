@@ -14,7 +14,6 @@ import {
     Size,
     Sprite,
     SpriteFrame,
-    TiledLayer,
     TiledMap,
     UITransform,
     Vec2,
@@ -25,6 +24,7 @@ import { PlayerController } from './PlayerController';
 const { ccclass, property } = _decorator;
 
 type TiledObject = {
+    id?: number | string;
     name?: string;
     type?: string;
     x?: number;
@@ -52,6 +52,9 @@ export class TileMapLevelLoader extends Component {
 
     @property
     public solidLayerName = 'solid';
+
+    @property
+    public wallObjectLayerName = 'Walls';
 
     @property
     public objectLayerName = 'objects';
@@ -85,6 +88,9 @@ export class TileMapLevelLoader extends Component {
 
     @property
     public spawnLift = 24;
+
+    @property
+    public fallResetBelowMap = 128;
 
     @property
     public showPlayerDebugMarker = false;
@@ -156,9 +162,80 @@ export class TileMapLevelLoader extends Component {
             return;
         }
 
+        const wallColliderCount = this.buildWallObjectColliders();
+        this.hideSolidLayerIfConfigured();
+        if (wallColliderCount > 0) {
+            console.log(
+                `[TileMapLevelLoader] Wall object layer "${this.wallObjectLayerName}" generated ${wallColliderCount} colliders `
+                + `debug=${this.showSolidColliderDebug}`,
+            );
+            return;
+        }
+
+        this.buildSolidTileFallbackColliders();
+    }
+
+    private buildWallObjectColliders(): number {
+        if (!this.tiledMap || !this.levelRoot) {
+            return 0;
+        }
+
+        const wallGroup = this.tiledMap.getObjectGroup(this.wallObjectLayerName);
+        if (!wallGroup) {
+            console.warn(`[TileMapLevelLoader] Missing "${this.wallObjectLayerName}" object layer. Falling back to "${this.solidLayerName}" tile colliders.`);
+            return 0;
+        }
+
+        const wallObjects = (wallGroup.getObjects() as unknown) as TiledObject[];
+        let colliderCount = 0;
+        let skippedCount = 0;
+
+        wallObjects.forEach((wallObject, index) => {
+            const width = Number(wallObject.width ?? 0);
+            const height = Number(wallObject.height ?? 0);
+            if (width <= 0 || height <= 0) {
+                skippedCount += 1;
+                console.warn(
+                    `[TileMapLevelLoader] Skipped wall object ${this.describeTiledObject(wallObject, index)}. `
+                    + 'Only rectangle objects with positive width and height are supported.',
+                );
+                return;
+            }
+
+            const x = Number(wallObject.x ?? 0);
+            const y = Number(wallObject.y ?? 0);
+            const colliderNode = new Node(this.getWallColliderNodeName(wallObject, colliderCount));
+            this.levelRoot!.addChild(colliderNode);
+            const worldCenter = this.tiledRectObjectToWorldCenter(x, y, width, height);
+            colliderNode.setWorldPosition(worldCenter);
+            this.configureStaticBoxCollider(colliderNode, width, height);
+            console.log(
+                `[TileMapLevelLoader] Wall ${colliderNode.name} raw=(${x.toFixed(1)}, ${y.toFixed(1)}, ${width.toFixed(1)}, ${height.toFixed(1)}) `
+                + `worldCenter=(${worldCenter.x.toFixed(1)}, ${worldCenter.y.toFixed(1)}, ${worldCenter.z.toFixed(1)})`,
+            );
+            colliderCount += 1;
+        });
+
+        if (colliderCount === 0) {
+            console.warn(
+                `[TileMapLevelLoader] Wall object layer "${this.wallObjectLayerName}" generated 0 colliders `
+                + `(skipped=${skippedCount}). Falling back to "${this.solidLayerName}" tile colliders.`,
+            );
+        }
+
+        return colliderCount;
+    }
+
+    private buildSolidTileFallbackColliders(): void {
+        if (!this.tiledMap || !this.levelRoot) {
+            return;
+        }
+
         const solidLayer = this.tiledMap.getLayer(this.solidLayerName);
         if (!solidLayer) {
-            console.error(`[TileMapLevelLoader] Missing "${this.solidLayerName}" layer in TMX.`);
+            console.error(
+                `[TileMapLevelLoader] Missing "${this.solidLayerName}" layer in TMX and no valid "${this.wallObjectLayerName}" wall objects were found.`,
+            );
             return;
         }
 
@@ -172,13 +249,9 @@ export class TileMapLevelLoader extends Component {
                 if (!gid) {
                     continue;
                 }
-                this.createStaticTileCollider(solidLayer, x, y, tileSize.width, tileSize.height);
+                this.createStaticTileCollider(x, y, tileSize.width, tileSize.height);
                 colliderCount += 1;
             }
-        }
-
-        if (this.hideSolidLayerOnStart) {
-            solidLayer.node.active = false;
         }
 
         if (colliderCount === 0) {
@@ -192,8 +265,18 @@ export class TileMapLevelLoader extends Component {
         );
     }
 
+    private hideSolidLayerIfConfigured(): void {
+        if (!this.hideSolidLayerOnStart || !this.tiledMap) {
+            return;
+        }
+
+        const solidLayer = this.tiledMap.getLayer(this.solidLayerName);
+        if (solidLayer) {
+            solidLayer.node.active = false;
+        }
+    }
+
     private createStaticTileCollider(
-        solidLayer: TiledLayer,
         tileX: number,
         tileY: number,
         tileWidth: number,
@@ -207,18 +290,21 @@ export class TileMapLevelLoader extends Component {
         this.levelRoot.addChild(colliderNode);
 
         colliderNode.setWorldPosition(this.tileCellToWorldCenter(tileX, tileY, tileWidth, tileHeight));
+        this.configureStaticBoxCollider(colliderNode, tileWidth, tileHeight);
+    }
 
+    private configureStaticBoxCollider(colliderNode: Node, width: number, height: number): void {
         const body = colliderNode.addComponent(RigidBody2D);
         body.type = ERigidBody2DType.Static;
 
         const collider = colliderNode.addComponent(BoxCollider2D);
-        collider.size = new Size(tileWidth, tileHeight);
+        collider.size = new Size(width, height);
         collider.friction = 0;
         collider.restitution = 0;
         collider.apply();
 
         if (this.showSolidColliderDebug) {
-            this.createSolidColliderDebugGraphic(colliderNode, tileWidth, tileHeight);
+            this.createSolidColliderDebugGraphic(colliderNode, width, height);
         }
     }
 
@@ -258,7 +344,8 @@ export class TileMapLevelLoader extends Component {
         }
 
         this.ensurePlayerRenderable(playerNode);
-        this.ensurePlayerController(playerNode);
+        const playerController = this.ensurePlayerController(playerNode);
+        this.configurePlayerFallReset(playerController);
         this.ensurePlayerDebugMarker(playerNode);
         this.player = playerNode;
         this.createDebugGroundBelowPlayer(playerNode);
@@ -443,10 +530,15 @@ export class TileMapLevelLoader extends Component {
         return visualNode;
     }
 
-    private ensurePlayerController(playerNode: Node): void {
-        if (!playerNode.getComponent(PlayerController)) {
-            playerNode.addComponent(PlayerController);
-        }
+    private ensurePlayerController(playerNode: Node): PlayerController {
+        return playerNode.getComponent(PlayerController) ?? playerNode.addComponent(PlayerController);
+    }
+
+    private configurePlayerFallReset(playerController: PlayerController): void {
+        const mapBottomLeft = this.getMapBottomLeftWorld();
+        const resetY = mapBottomLeft.y - this.fallResetBelowMap;
+        playerController.setFallResetY(resetY);
+        console.log(`[TileMapLevelLoader] Player fall reset Y set to ${resetY.toFixed(1)} mapBottom=${mapBottomLeft.y.toFixed(1)}`);
     }
 
     private createPlayerFallbackGraphic(playerNode: Node): void {
@@ -599,6 +691,29 @@ export class TileMapLevelLoader extends Component {
             bottomLeft.y + this.mapPixelSize.y - tiledY,
             0,
         );
+    }
+
+    private tiledRectObjectToWorldCenter(tiledX: number, tiledY: number, width: number, height: number): Vec3 {
+        const bottomLeft = this.getMapBottomLeftWorld();
+        return new Vec3(
+            bottomLeft.x + tiledX + width * 0.5,
+            bottomLeft.y + tiledY - height * 0.5,
+            0,
+        );
+    }
+
+    private getWallColliderNodeName(wallObject: TiledObject, index: number): string {
+        const objectLabel = (wallObject.name && wallObject.name.trim().length > 0)
+            ? wallObject.name
+            : `${wallObject.id ?? 'rect'}`;
+        const safeLabel = objectLabel.replace(/[^A-Za-z0-9_-]/g, '_');
+        return `Wall_${index}_${safeLabel}`;
+    }
+
+    private describeTiledObject(wallObject: TiledObject, index: number): string {
+        const name = wallObject.name ? ` name="${wallObject.name}"` : '';
+        const id = wallObject.id === undefined ? '' : ` id=${wallObject.id}`;
+        return `#${index}${id}${name}`;
     }
 
     private tileCellToWorldCenter(tileX: number, tileY: number, tileWidth: number, tileHeight: number): Vec3 {

@@ -4,8 +4,10 @@ import {
     Collider2D,
     Component,
     Contact2DType,
+    Color,
     ERigidBody2DType,
     EventKeyboard,
+    Graphics,
     input,
     Input,
     KeyCode,
@@ -13,6 +15,7 @@ import {
     RigidBody2D,
     Size,
     Sprite,
+    UITransform,
     Vec2,
     Vec3,
     isValid,
@@ -44,13 +47,25 @@ export class PlayerController extends Component {
     public fallResetDistance = 160;
 
     @property
+    public useFallResetDistance = false;
+
+    @property
     public debugPhysicsPosition = true;
+
+    @property
+    public showColliderDebug = false;
+
+    @property
+    public showGroundSensorDebug = false;
 
     @property
     public visualNodeName = 'Visual';
 
     private body: RigidBody2D | null = null;
     private mainCollider: BoxCollider2D | null = null;
+    private groundSensor: BoxCollider2D | null = null;
+    private colliderDebugNode: Node | null = null;
+    private groundSensorDebugNode: Node | null = null;
     private visualNode: Node | null = null;
     private visualSprite: Sprite | null = null;
     private fallResetPosition = new Vec3();
@@ -82,6 +97,10 @@ export class PlayerController extends Component {
         );
     }
 
+    public setFallResetY(resetY: number): void {
+        this.fallResetY = resetY;
+    }
+
     protected onDestroy(): void {
         input.off(Input.EventType.KEY_DOWN, this.onKeyDown, this);
         input.off(Input.EventType.KEY_UP, this.onKeyUp, this);
@@ -91,11 +110,17 @@ export class PlayerController extends Component {
             this.mainCollider.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
             this.mainCollider.off(Contact2DType.END_CONTACT, this.onEndContact, this);
         }
+
+        if (this.groundSensor) {
+            this.groundSensor.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+            this.groundSensor.off(Contact2DType.END_CONTACT, this.onEndContact, this);
+        }
     }
 
     protected update(deltaTime: number): void {
         this.ensureVisible();
         this.applyPhysicsMovement();
+        this.updateColliderDebug();
         this.monitorPhysicsPosition(deltaTime);
     }
 
@@ -124,7 +149,9 @@ export class PlayerController extends Component {
 
     private setupPhysicsComponents(): void {
         this.body = this.node.getComponent(RigidBody2D);
-        this.mainCollider = this.node.getComponent(BoxCollider2D);
+        const colliders = this.node.getComponents(BoxCollider2D);
+        this.mainCollider = colliders.find((collider) => !collider.sensor) ?? colliders[0] ?? null;
+        this.groundSensor = colliders.find((collider) => collider.sensor && collider !== this.mainCollider) ?? null;
 
         if (!this.body) {
             this.body = this.node.addComponent(RigidBody2D);
@@ -132,6 +159,10 @@ export class PlayerController extends Component {
 
         if (!this.mainCollider) {
             this.mainCollider = this.node.addComponent(BoxCollider2D);
+        }
+
+        if (!this.groundSensor) {
+            this.groundSensor = this.node.addComponent(BoxCollider2D);
         }
 
         this.body.type = ERigidBody2DType.Dynamic;
@@ -146,13 +177,23 @@ export class PlayerController extends Component {
         this.mainCollider.friction = 0;
         this.mainCollider.restitution = 0;
         this.mainCollider.apply();
-        this.mainCollider.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
-        this.mainCollider.on(Contact2DType.END_CONTACT, this.onEndContact, this);
+
+        this.groundSensor.sensor = true;
+        this.groundSensor.size = new Size(this.bodySize.x * 0.65, 4);
+        this.groundSensor.offset = new Vec2(0, 1);
+        this.groundSensor.density = 0;
+        this.groundSensor.friction = 0;
+        this.groundSensor.restitution = 0;
+        this.groundSensor.apply();
+        this.groundSensor.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+        this.groundSensor.on(Contact2DType.END_CONTACT, this.onEndContact, this);
 
         this.physicsReady = true;
+        this.updateColliderDebug();
         console.log(
             `[PlayerController] Physics components ready type=Dynamic fixedRotation=true gravityScale=1 `
-            + `colliderSize=${this.bodySize.x}x${this.bodySize.y} offset=(0, ${this.bodySize.y * 0.5})`,
+            + `colliderSize=${this.bodySize.x}x${this.bodySize.y} offset=(0, ${this.bodySize.y * 0.5}) `
+            + `groundSensor=${(this.bodySize.x * 0.65).toFixed(1)}x4 offset=(0, 1)`,
         );
     }
 
@@ -262,13 +303,90 @@ export class PlayerController extends Component {
         const velocity = this.body?.linearVelocity ?? new Vec2();
         console.log(
             `[PlayerController] physics pos=(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)}) `
-            + `vel=(${velocity.x.toFixed(1)}, ${velocity.y.toFixed(1)}) moveAxis=${this.moveAxis} grounded=${this.isGrounded}`,
+            + `vel=(${velocity.x.toFixed(1)}, ${velocity.y.toFixed(1)}) moveAxis=${this.moveAxis} `
+            + `grounded=${this.isGrounded} groundedContacts=${this.groundedContacts}`,
         );
+    }
+
+    private updateColliderDebug(): void {
+        this.drawColliderDebugBox(
+            'PlayerColliderDebug',
+            this.mainCollider,
+            this.showColliderDebug,
+            new Color(255, 40, 40, 255),
+            new Color(255, 40, 40, 40),
+            (node) => { this.colliderDebugNode = node; },
+            this.colliderDebugNode,
+        );
+        this.drawColliderDebugBox(
+            'PlayerGroundSensorDebug',
+            this.groundSensor,
+            this.showGroundSensorDebug,
+            new Color(40, 160, 255, 255),
+            new Color(40, 160, 255, 40),
+            (node) => { this.groundSensorDebugNode = node; },
+            this.groundSensorDebugNode,
+        );
+    }
+
+    private drawColliderDebugBox(
+        nodeName: string,
+        collider: BoxCollider2D | null,
+        visible: boolean,
+        strokeColor: Color,
+        fillColor: Color,
+        assignNode: (node: Node) => void,
+        existingNode: Node | null,
+    ): void {
+        if (!collider) {
+            if (existingNode) {
+                existingNode.active = false;
+            }
+            return;
+        }
+
+        let debugNode = existingNode;
+        if (!debugNode || !isValid(debugNode)) {
+            debugNode = this.node.getChildByName(nodeName);
+            if (!debugNode) {
+                debugNode = new Node(nodeName);
+                this.node.addChild(debugNode);
+            }
+            assignNode(debugNode);
+        }
+
+        debugNode.active = visible;
+        if (!visible) {
+            return;
+        }
+
+        const size = collider.size;
+        debugNode.setPosition(collider.offset.x, collider.offset.y, 0);
+
+        let transform = debugNode.getComponent(UITransform);
+        if (!transform) {
+            transform = debugNode.addComponent(UITransform);
+        }
+        transform.setContentSize(size.width, size.height);
+
+        let graphics = debugNode.getComponent(Graphics);
+        if (!graphics) {
+            graphics = debugNode.addComponent(Graphics);
+        }
+        graphics.clear();
+        graphics.strokeColor = strokeColor;
+        graphics.fillColor = fillColor;
+        graphics.lineWidth = 1;
+        graphics.rect(-size.width * 0.5, -size.height * 0.5, size.width, size.height);
+        graphics.fill();
+        graphics.stroke();
     }
 
     private shouldResetAfterFall(): boolean {
         const resetByAbsoluteY = this.node.worldPosition.y < this.fallResetY;
-        const resetByDistance = this.node.worldPosition.y < this.fallResetPosition.y - this.fallResetDistance;
+        const resetByDistance = this.useFallResetDistance
+            && this.fallResetDistance > 0
+            && this.node.worldPosition.y < this.fallResetPosition.y - this.fallResetDistance;
         return resetByAbsoluteY || resetByDistance;
     }
 
@@ -328,34 +446,23 @@ export class PlayerController extends Component {
     }
 
     private onBeginContact(selfCollider: Collider2D, otherCollider: Collider2D): void {
-        if (selfCollider !== this.mainCollider) {
+        if (selfCollider !== this.groundSensor) {
             return;
         }
         if (otherCollider.sensor) {
-            return;
-        }
-        if (!this.isGroundContact(otherCollider)) {
             return;
         }
         this.groundedContacts += 1;
     }
 
     private onEndContact(selfCollider: Collider2D, otherCollider: Collider2D): void {
-        if (selfCollider !== this.mainCollider) {
+        if (selfCollider !== this.groundSensor) {
             return;
         }
         if (otherCollider.sensor) {
             return;
         }
-        if (!this.isGroundContact(otherCollider)) {
-            return;
-        }
         this.groundedContacts = Math.max(0, this.groundedContacts - 1);
-    }
-
-    private isGroundContact(otherCollider: Collider2D): boolean {
-        const playerFootY = this.node.worldPosition.y + this.bodySize.y * 0.15;
-        return otherCollider.node.worldPosition.y <= playerFootY;
     }
 
     private updateFacing(): void {
