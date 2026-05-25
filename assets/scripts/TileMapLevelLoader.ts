@@ -23,6 +23,8 @@ import { PlayerController } from './PlayerController';
 
 const { ccclass, property } = _decorator;
 
+const SMALL_MARIO_VISUAL_OFFSET_Y = 8;
+
 type TiledObject = {
     id?: number | string;
     name?: string;
@@ -525,7 +527,7 @@ export class TileMapLevelLoader extends Component {
             playerNode.addChild(visualNode);
         }
 
-        visualNode.setPosition(0, 16, 0);
+        visualNode.setPosition(0, SMALL_MARIO_VISUAL_OFFSET_Y, 0);
         visualNode.active = true;
         return visualNode;
     }

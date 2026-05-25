@@ -35,7 +35,7 @@ export class PlayerController extends Component {
     public jumpSpeed = 420;
 
     @property(Vec2)
-    public bodySize = new Vec2(28, 30);
+    public bodySize = new Vec2(14, 16);
 
     @property
     public debugInput = true;
@@ -63,6 +63,15 @@ export class PlayerController extends Component {
 
     @property
     public visualNodeName = 'Visual';
+
+    @property
+    public visualOffsetY = 8;
+
+    @property
+    public groundSensorHeight = 3;
+
+    @property
+    public groundSensorOffsetY = -1;
 
     @property([SpriteFrame])
     public idleFrames: SpriteFrame[] = [];
@@ -207,9 +216,10 @@ export class PlayerController extends Component {
         this.mainCollider.restitution = 0;
         this.mainCollider.apply();
 
+        const groundSensorWidth = this.bodySize.x * 0.8;
         this.groundSensor.sensor = true;
-        this.groundSensor.size = new Size(this.bodySize.x * 0.65, 4);
-        this.groundSensor.offset = new Vec2(0, 1);
+        this.groundSensor.size = new Size(groundSensorWidth, this.groundSensorHeight);
+        this.groundSensor.offset = new Vec2(0, this.groundSensorOffsetY);
         this.groundSensor.density = 0;
         this.groundSensor.friction = 0;
         this.groundSensor.restitution = 0;
@@ -222,7 +232,7 @@ export class PlayerController extends Component {
         console.log(
             `[PlayerController] Physics components ready type=Dynamic fixedRotation=true gravityScale=1 `
             + `colliderSize=${this.bodySize.x}x${this.bodySize.y} offset=(0, ${this.bodySize.y * 0.5}) `
-            + `groundSensor=${(this.bodySize.x * 0.65).toFixed(1)}x4 offset=(0, 1)`,
+            + `groundSensor=${groundSensorWidth.toFixed(1)}x${this.groundSensorHeight} offset=(0, ${this.groundSensorOffsetY})`,
         );
     }
 
@@ -296,7 +306,7 @@ export class PlayerController extends Component {
             this.node.addChild(visual);
         }
 
-        visual.setPosition(0, 16, 0);
+        visual.setPosition(0, this.visualOffsetY, 0);
         this.visualNode = visual;
         this.visualSprite = visual.getComponent(Sprite);
         this.captureFallbackSpriteFrame();

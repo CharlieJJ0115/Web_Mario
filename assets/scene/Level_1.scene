@@ -179,7 +179,7 @@
     "_priority": 0,
     "_fov": 45,
     "_fovAxis": 0,
-    "_orthoHeight": 431.34796238244513,
+    "_orthoHeight": 431.5657620041754,
     "_near": 0,
     "_far": 2000,
     "_color": {
@@ -455,7 +455,7 @@
       "__id__": 5
     },
     "_children": [],
-    "_active": true,
+    "_active": false,
     "_components": [
       {
         "__id__": 13
@@ -772,8 +772,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 19,
-      "height": 26
+      "width": 16,
+      "height": 16
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -803,7 +803,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35@f8ed8",
+      "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@5d1d6",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -819,7 +819,7 @@
     "_isTrimmedMode": true,
     "_useGrayscale": false,
     "_atlas": {
-      "__uuid__": "8c027e6b-2ec2-47b5-9121-ce9e6821af35",
+      "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1",
       "__expectedType__": "cc.SpriteAtlas"
     },
     "_id": "69fQUF/utIAo2WokMvawtH"
@@ -838,8 +838,8 @@
     "jumpSpeed": 13,
     "bodySize": {
       "__type__": "cc.Vec2",
-      "x": 28,
-      "y": 30
+      "x": 20,
+      "y": 18
     },
     "debugInput": true,
     "useBrowserKeyboardFallback": true,
@@ -850,6 +850,9 @@
     "showColliderDebug": true,
     "showGroundSensorDebug": true,
     "visualNodeName": "Visual",
+    "visualOffsetY": 8,
+    "groundSensorHeight": 3,
+    "groundSensorOffsetY": -1,
     "idleFrames": [
       {
         "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@5d1d6",
