@@ -18,6 +18,9 @@
     "_children": [
       {
         "__id__": 2
+      },
+      {
+        "__id__": 22
       }
     ],
     "_active": true,
@@ -52,7 +55,7 @@
     },
     "autoReleaseAssets": false,
     "_globals": {
-      "__id__": 22
+      "__id__": 24
     },
     "_id": "7b884e35-bad0-4cc7-906e-d2105c4f1bee"
   },
@@ -838,30 +841,89 @@
     "_id": "c5V1EV8IpMtrIvY1OE9t2u"
   },
   {
+    "__type__": "cc.Node",
+    "_name": "GameStartController",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": {
+      "__id__": 1
+    },
+    "_children": [],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 23
+      }
+    ],
+    "_prefab": null,
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 1073741824,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": "81ArwQjIdG95FE0iQo/rVe"
+  },
+  {
+    "__type__": "4813dwL4exA/J+IBp3ZZmRy",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 22
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "delaySeconds": 2,
+    "redirectMode": 0,
+    "_id": "49HBK7GE1P0aFDhJqNwN9P"
+  },
+  {
     "__type__": "cc.SceneGlobals",
     "ambient": {
-      "__id__": 23
-    },
-    "shadows": {
-      "__id__": 24
-    },
-    "_skybox": {
       "__id__": 25
     },
-    "fog": {
+    "shadows": {
       "__id__": 26
     },
-    "octree": {
+    "_skybox": {
       "__id__": 27
     },
-    "skin": {
+    "fog": {
       "__id__": 28
     },
-    "lightProbeInfo": {
+    "octree": {
       "__id__": 29
     },
-    "postSettings": {
+    "skin": {
       "__id__": 30
+    },
+    "lightProbeInfo": {
+      "__id__": 31
+    },
+    "postSettings": {
+      "__id__": 32
     },
     "bakedWithStationaryMainLight": false,
     "bakedWithHighpLightmap": false

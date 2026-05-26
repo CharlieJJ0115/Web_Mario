@@ -5,6 +5,7 @@ import {
     Component,
     Contact2DType,
     Color,
+    director,
     ERigidBody2DType,
     EventKeyboard,
     Graphics,
@@ -22,6 +23,7 @@ import {
     isValid,
 } from 'cc';
 import { EDITOR } from 'cc/env';
+import { GameFlowState } from './GameFlowState';
 import { LifeHudText } from './LifeHudText';
 import { OneWayPlatformController } from './OneWayPlatformController';
 
@@ -155,6 +157,7 @@ export class PlayerController extends Component {
     private readonly defaultSmallColliderOffset = new Vec2(0, 8);
     private damageInvulnerableElapsed = 0;
     private damageQueued = false;
+    private deathFlowQueued = false;
     private smallColliderSize = new Vec2();
     private smallColliderOffset = new Vec2();
     private hasCapturedSmallCollider = false;
@@ -189,6 +192,7 @@ export class PlayerController extends Component {
         }
 
         this.fallResetPosition = this.node.worldPosition.clone();
+        this.syncLifeHudFromGameFlow();
         console.log(
             `[PlayerController] start world=(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)}, ${this.node.worldPosition.z.toFixed(1)}) `
             + `body=${this.body ? 'ready' : 'missing'} collider=${this.mainCollider ? 'ready' : 'missing'}`,
@@ -244,11 +248,10 @@ export class PlayerController extends Component {
 
         if (this.isBigMario) {
             this.shrinkToSmallMario();
+            this.damageInvulnerableElapsed = Math.max(this.damageInvulnerableDuration, 0);
         } else {
-            this.lifeHud?.addLives(-1);
+            this.requestDeathFlow();
         }
-
-        this.damageInvulnerableElapsed = Math.max(this.damageInvulnerableDuration, 0);
     };
 
     public canStandOnOneWayPlatform(platformTopY: number, tolerance = 2): boolean {
@@ -307,6 +310,7 @@ export class PlayerController extends Component {
 
     protected onDestroy(): void {
         this.damageQueued = false;
+        this.deathFlowQueued = false;
         input.off(Input.EventType.KEY_DOWN, this.onKeyDown, this);
         input.off(Input.EventType.KEY_UP, this.onKeyUp, this);
         this.unregisterBrowserKeyboardFallback();
@@ -696,15 +700,41 @@ export class PlayerController extends Component {
         }
 
         console.warn(
-            `[PlayerController] Player fell below reset threshold. Resetting to `
+            `[PlayerController] Player fell below reset threshold. Starting death flow from `
             + `(${this.fallResetPosition.x.toFixed(1)}, ${this.fallResetPosition.y.toFixed(1)}, ${this.fallResetPosition.z.toFixed(1)}).`,
         );
 
+        this.requestDeathFlow();
+    }
+
+    private requestDeathFlow(): void {
+        if (this.deathFlowQueued) {
+            return;
+        }
+
+        this.deathFlowQueued = true;
         this.setBodyVelocity(new Vec2(0, 0));
         this.countedGroundContacts.clear();
         this.groundedContacts = 0;
         this.jumpQueued = false;
-        this.node.setWorldPosition(this.fallResetPosition);
+        this.pressedKeys.clear();
+        this.moveAxis = 0;
+
+        const fallbackLives = this.lifeHud?.getLives() ?? GameFlowState.currentLives;
+        const shouldContinue = GameFlowState.loseLifeAndCheckContinue(fallbackLives);
+        this.lifeHud?.setLives(GameFlowState.currentLives);
+
+        director.loadScene(shouldContinue
+            ? GameFlowState.gameStartSceneName
+            : GameFlowState.gameOverSceneName);
+    }
+
+    private syncLifeHudFromGameFlow(): void {
+        if (!GameFlowState.hasActiveRun()) {
+            return;
+        }
+
+        this.lifeHud?.setLives(GameFlowState.currentLives);
     }
 
     private monitorPhysicsPosition(deltaTime: number): void {
