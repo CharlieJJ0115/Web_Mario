@@ -1,5 +1,7 @@
 import {
     _decorator,
+    AudioClip,
+    AudioSource,
     BoxCollider2D,
     Camera,
     Collider2D,
@@ -78,6 +80,21 @@ export class PlayerController extends Component {
     @property
     public damageInvulnerableDuration = 1;
 
+    @property(AudioClip)
+    public jumpSound: AudioClip | null = null;
+
+    @property(AudioClip)
+    public dieSound: AudioClip | null = null;
+
+    @property(AudioClip)
+    public growSound: AudioClip | null = null;
+
+    @property(AudioClip)
+    public shrinkSound: AudioClip | null = null;
+
+    @property
+    public sfxVolume = 1;
+
     @property
     public visualNodeName = 'Visual';
 
@@ -150,6 +167,7 @@ export class PlayerController extends Component {
     private body: RigidBody2D | null = null;
     private mainCollider: BoxCollider2D | null = null;
     private groundSensor: BoxCollider2D | null = null;
+    private sfxSource: AudioSource | null = null;
     private colliderDebugNode: Node | null = null;
     private groundSensorDebugNode: Node | null = null;
     private visualNode: Node | null = null;
@@ -199,6 +217,7 @@ export class PlayerController extends Component {
         console.log('[PlayerController] onLoad');
         this.resolveVisualNode();
         this.warnIfStaticMobility();
+        this.setupSfxSource();
         this.setupPhysicsComponents();
         this.collectOneWayPlatforms();
         this.registerInput();
@@ -304,6 +323,7 @@ export class PlayerController extends Component {
         this.resetAnimationPlayback();
         this.updatePlayerAnimation(0);
         this.updateColliderDebug();
+        this.playSfx(this.growSound);
 
         console.log('[PlayerController] Mario grew into big Mario.');
     };
@@ -324,6 +344,7 @@ export class PlayerController extends Component {
         this.resetAnimationPlayback();
         this.updatePlayerAnimation(0);
         this.updateColliderDebug();
+        this.playSfx(this.shrinkSound);
     }
 
     protected onDestroy(): void {
@@ -438,6 +459,7 @@ export class PlayerController extends Component {
             velocity.y = this.jumpSpeed;
             this.countedGroundContacts.clear();
             this.groundedContacts = 0;
+            this.playSfx(this.jumpSound);
         }
         this.jumpQueued = false;
 
@@ -770,6 +792,7 @@ export class PlayerController extends Component {
 
     private startDeathAnimation(): void {
         this.isDying = true;
+        this.playSfx(this.dieSound);
         this.damageQueued = false;
         this.growQueued = false;
         this.countedGroundContacts.clear();
@@ -798,6 +821,29 @@ export class PlayerController extends Component {
         }
 
         this.scheduleOnce(this.finishDeathFlow, Math.max(this.deathSceneDelay, 0));
+    }
+
+    private setupSfxSource(): void {
+        this.sfxSource = this.node.getComponent(AudioSource);
+        if (!this.sfxSource) {
+            this.sfxSource = this.node.addComponent(AudioSource);
+        }
+    }
+
+    private playSfx(clip: AudioClip | null): void {
+        if (!clip) {
+            return;
+        }
+
+        if (!this.sfxSource) {
+            this.setupSfxSource();
+        }
+
+        this.sfxSource?.playOneShot(clip, this.normalizeSfxVolume(this.sfxVolume));
+    }
+
+    private normalizeSfxVolume(value: number): number {
+        return Math.max(value, 0);
     }
 
     private readonly finishDeathFlow = (): void => {

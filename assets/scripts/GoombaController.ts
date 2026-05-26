@@ -1,5 +1,7 @@
 import {
     _decorator,
+    AudioClip,
+    AudioSource,
     BoxCollider2D,
     Collider2D,
     Color,
@@ -65,9 +67,16 @@ export class GoombaController extends Component {
     @property
     public stompScoreValue = 100;
 
+    @property(AudioClip)
+    public stompSound: AudioClip | null = null;
+
+    @property
+    public sfxVolume = 1;
+
     private body: RigidBody2D | null = null;
     private collider: BoxCollider2D | null = null;
     private sprite: Sprite | null = null;
+    private sfxSource: AudioSource | null = null;
     private colliderDebugNode: Node | null = null;
     private walkElapsed = 0;
     private mirrorFrame = false;
@@ -130,6 +139,7 @@ export class GoombaController extends Component {
         this.body.gravityScale = 1;
 
         this.resolveCollider();
+        this.setupSfxSource();
         this.registerContactListener();
         this.updateColliderDebug();
     }
@@ -214,6 +224,7 @@ export class GoombaController extends Component {
         const player = this.pendingStompPlayer;
         this.pendingStompPlayer = null;
         this.isDead = true;
+        this.playSfx(this.stompSound);
         player?.bounceAfterStomp(this.stompBounceSpeed);
         if (player) {
             ScoreHudText.addToActiveScore(this.stompScoreValue, this.getScorePopupWorldPosition(player));
@@ -242,6 +253,29 @@ export class GoombaController extends Component {
         const position = player.node.worldPosition.clone();
         position.y += 28;
         return position;
+    }
+
+    private setupSfxSource(): void {
+        this.sfxSource = this.node.getComponent(AudioSource);
+        if (!this.sfxSource) {
+            this.sfxSource = this.node.addComponent(AudioSource);
+        }
+    }
+
+    private playSfx(clip: AudioClip | null): void {
+        if (!clip) {
+            return;
+        }
+
+        if (!this.sfxSource) {
+            this.setupSfxSource();
+        }
+
+        this.sfxSource?.playOneShot(clip, this.normalizeSfxVolume(this.sfxVolume));
+    }
+
+    private normalizeSfxVolume(value: number): number {
+        return Math.max(value, 0);
     }
 
     private destroyIfBelowScreen(): void {

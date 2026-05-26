@@ -1,5 +1,7 @@
 import {
     _decorator,
+    AudioClip,
+    AudioSource,
     BoxCollider2D,
     Collider2D,
     Component,
@@ -55,9 +57,16 @@ export class QuestionBlockController extends Component {
     @property
     public scoreValue = 100;
 
+    @property(AudioClip)
+    public mushroomAppearSound: AudioClip | null = null;
+
+    @property
+    public sfxVolume = 1;
+
     private sprite: Sprite | null = null;
     private body: RigidBody2D | null = null;
     private collider: BoxCollider2D | null = null;
+    private sfxSource: AudioSource | null = null;
     private frameIndex = 0;
     private frameElapsed = 0;
     private used = false;
@@ -107,6 +116,7 @@ export class QuestionBlockController extends Component {
         this.collider.size = new Size(16, 16);
         this.collider.apply();
         this.collider.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+        this.setupSfxSource();
     }
 
     private syncAnimationFrameIndexWithSprite(): void {
@@ -194,6 +204,8 @@ export class QuestionBlockController extends Component {
             return;
         }
 
+        this.playSfx(this.mushroomAppearSound);
+
         const mushroomNode = new Node('Mushroom');
         this.node.parent.addChild(mushroomNode);
 
@@ -227,5 +239,28 @@ export class QuestionBlockController extends Component {
                 mushroom.startMoving();
             })
             .start();
+    }
+
+    private setupSfxSource(): void {
+        this.sfxSource = this.node.getComponent(AudioSource);
+        if (!this.sfxSource) {
+            this.sfxSource = this.node.addComponent(AudioSource);
+        }
+    }
+
+    private playSfx(clip: AudioClip | null): void {
+        if (!clip) {
+            return;
+        }
+
+        if (!this.sfxSource) {
+            this.setupSfxSource();
+        }
+
+        this.sfxSource?.playOneShot(clip, this.normalizeSfxVolume(this.sfxVolume));
+    }
+
+    private normalizeSfxVolume(value: number): number {
+        return Math.max(value, 0);
     }
 }
