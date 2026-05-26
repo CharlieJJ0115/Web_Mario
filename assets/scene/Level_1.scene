@@ -687,6 +687,7 @@
     },
     "fallbackDestroyY": -300,
     "movementEnabled": true,
+    "scoreValue": 100,
     "_id": "e8R242D9ZBubEE24+2SHPD"
   },
   {
@@ -1064,6 +1065,7 @@
     "stompTolerance": 3,
     "stompBounceSpeed": 3,
     "destroyBelowY": -300,
+    "stompScoreValue": 100,
     "_id": "31VBjYkutLAY8WyeYV4mhj"
   },
   {
@@ -2276,7 +2278,7 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 20,
+      "width": 30,
       "height": 40
     },
     "_anchorPoint": {
@@ -2306,7 +2308,7 @@
       "b": 255,
       "a": 255
     },
-    "_string": "30",
+    "_string": "300",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
     "_actualFontSize": 40,
@@ -2435,8 +2437,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 177.96875,
-      "height": 50.4
+      "width": 80,
+      "height": 40
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2474,8 +2476,11 @@
     "_lineHeight": 40,
     "_overflow": 0,
     "_enableWrapText": true,
-    "_font": null,
-    "_isSystemFontUsed": true,
+    "_font": {
+      "__uuid__": "7abacf3d-13f7-48d8-ac1d-37c676494a44",
+      "__expectedType__": "cc.BitmapFont"
+    },
+    "_isSystemFontUsed": false,
     "_spacingX": 0,
     "_isItalic": false,
     "_isBold": false,
@@ -2528,6 +2533,13 @@
     "digits": 8,
     "minScore": 0,
     "maxScore": 99999999,
+    "popupSpriteFrame": {
+      "__uuid__": "d506159f-6ad0-433b-aae0-8cfb401b4dfb@c30fb",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "popupDuration": 0.6,
+    "popupRiseDistance": 24,
+    "popupScale": 1,
     "_id": "60DlNZnFNIbK25TXLguxZY"
   },
   {

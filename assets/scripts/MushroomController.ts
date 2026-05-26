@@ -11,8 +11,10 @@ import {
     Sprite,
     UITransform,
     Vec2,
+    Vec3,
 } from 'cc';
 import { PlayerController } from './PlayerController';
+import { ScoreHudText } from './ScoreHudText';
 
 const { ccclass, property } = _decorator;
 
@@ -35,6 +37,9 @@ export class MushroomController extends Component {
 
     @property
     public movementEnabled = true;
+
+    @property
+    public scoreValue = 100;
 
     private body: RigidBody2D | null = null;
     private collider: BoxCollider2D | null = null;
@@ -103,8 +108,15 @@ export class MushroomController extends Component {
 
         this.consumed = true;
         player.tryGrowBig();
+        ScoreHudText.addToActiveScore(this.scoreValue, this.getScorePopupWorldPosition(player));
         this.hideImmediately();
         this.scheduleOnce(this.destroyConsumedMushroom, 0);
+    }
+
+    private getScorePopupWorldPosition(player: PlayerController): Vec3 {
+        const position = player.node.worldPosition.clone();
+        position.y += 28;
+        return position;
     }
 
     private hideImmediately(): void {

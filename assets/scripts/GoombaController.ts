@@ -14,10 +14,12 @@ import {
     SpriteFrame,
     UITransform,
     Vec2,
+    Vec3,
     isValid,
 } from 'cc';
 import { EDITOR } from 'cc/env';
 import { PlayerController } from './PlayerController';
+import { ScoreHudText } from './ScoreHudText';
 
 const { ccclass, executeInEditMode, property } = _decorator;
 
@@ -59,6 +61,9 @@ export class GoombaController extends Component {
 
     @property
     public destroyBelowY = -300;
+
+    @property
+    public stompScoreValue = 100;
 
     private body: RigidBody2D | null = null;
     private collider: BoxCollider2D | null = null;
@@ -210,6 +215,9 @@ export class GoombaController extends Component {
         this.pendingStompPlayer = null;
         this.isDead = true;
         player?.bounceAfterStomp(this.stompBounceSpeed);
+        if (player) {
+            ScoreHudText.addToActiveScore(this.stompScoreValue, this.getScorePopupWorldPosition(player));
+        }
 
         if (this.sprite && this.deadFrame) {
             this.sprite.spriteFrame = this.deadFrame;
@@ -229,6 +237,12 @@ export class GoombaController extends Component {
             this.setBodyVelocity(new Vec2(0, 0));
         }
     };
+
+    private getScorePopupWorldPosition(player: PlayerController): Vec3 {
+        const position = player.node.worldPosition.clone();
+        position.y += 28;
+        return position;
+    }
 
     private destroyIfBelowScreen(): void {
         if (this.node.worldPosition.y < this.destroyBelowY) {

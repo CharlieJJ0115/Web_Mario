@@ -3,6 +3,13 @@ import {
     BitmapFont,
     Component,
     Label,
+    Node,
+    Sprite,
+    SpriteFrame,
+    tween,
+    UIOpacity,
+    UITransform,
+    Vec3,
 } from 'cc';
 
 const { ccclass, executeInEditMode, property } = _decorator;
@@ -10,6 +17,8 @@ const { ccclass, executeInEditMode, property } = _decorator;
 @ccclass('ScoreHudText')
 @executeInEditMode
 export class ScoreHudText extends Component {
+    private static activeInstance: ScoreHudText | null = null;
+
     @property(Label)
     public scoreLabel: Label | null = null;
 
@@ -28,15 +37,39 @@ export class ScoreHudText extends Component {
     @property
     public maxScore = 99999999;
 
+    @property(SpriteFrame)
+    public popupSpriteFrame: SpriteFrame | null = null;
+
+    @property
+    public popupDuration = 0.6;
+
+    @property
+    public popupRiseDistance = 24;
+
+    @property
+    public popupScale = 1;
+
+    public static addToActiveScore(amount: number, worldPosition: Vec3): void {
+        this.activeInstance?.addScoreWithPopup(amount, worldPosition);
+    }
+
     protected onLoad(): void {
         this.refresh();
     }
 
     protected onEnable(): void {
+        ScoreHudText.activeInstance = this;
         this.refresh();
     }
 
+    protected onDisable(): void {
+        if (ScoreHudText.activeInstance === this) {
+            ScoreHudText.activeInstance = null;
+        }
+    }
+
     protected start(): void {
+        ScoreHudText.activeInstance = this;
         this.refresh();
     }
 
@@ -51,6 +84,11 @@ export class ScoreHudText extends Component {
 
     public addScore(delta: number): void {
         this.setScore(this.score + delta);
+    }
+
+    public addScoreWithPopup(amount: number, worldPosition: Vec3): void {
+        this.addScore(amount);
+        this.spawnScorePopup(worldPosition);
     }
 
     public getScore(): number {
@@ -83,7 +121,58 @@ export class ScoreHudText extends Component {
 
     private formatScore(value: number): string {
         const width = Math.max(1, Math.trunc(this.digits));
-        return String(value).padStart(width, '0');
+        let text = String(value);
+        while (text.length < width) {
+            text = `0${text}`;
+        }
+        return text;
+    }
+
+    private spawnScorePopup(worldPosition: Vec3): void {
+        if (!this.popupSpriteFrame) {
+            return;
+        }
+
+        const parent = this.node.parent ?? this.node;
+        const popupNode = new Node('ScorePopup');
+        parent.addChild(popupNode);
+
+        const transform = popupNode.addComponent(UITransform);
+        const originalSize = (this.popupSpriteFrame as unknown as {
+            originalSize?: { width: number; height: number };
+            rect?: { width: number; height: number };
+        }).originalSize ?? (this.popupSpriteFrame as unknown as {
+            rect?: { width: number; height: number };
+        }).rect;
+        transform.setContentSize(originalSize?.width ?? 16, originalSize?.height ?? 12);
+
+        const sprite = popupNode.addComponent(Sprite);
+        sprite.spriteFrame = this.popupSpriteFrame;
+
+        const opacity = popupNode.addComponent(UIOpacity);
+        opacity.opacity = 255;
+
+        const scale = Math.max(this.popupScale, 0.01);
+        popupNode.setScale(scale, scale, 1);
+        const popupWorldPosition = worldPosition.clone();
+        popupWorldPosition.z = parent.worldPosition.z;
+        popupNode.setWorldPosition(popupWorldPosition);
+
+        const startPosition = popupNode.position.clone();
+        const endPosition = new Vec3(
+            startPosition.x,
+            startPosition.y + Math.max(this.popupRiseDistance, 0),
+            startPosition.z,
+        );
+        const duration = Math.max(this.popupDuration, 0.01);
+
+        tween(popupNode)
+            .to(duration, { position: endPosition })
+            .call(() => popupNode.destroy())
+            .start();
+        tween(opacity)
+            .to(duration, { opacity: 0 })
+            .start();
     }
 
     private clampScore(value: number): number {

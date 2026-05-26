@@ -16,6 +16,7 @@ import {
 } from 'cc';
 import { MushroomController } from './MushroomController';
 import { PlayerController } from './PlayerController';
+import { ScoreHudText } from './ScoreHudText';
 
 const { ccclass, property } = _decorator;
 
@@ -50,6 +51,9 @@ export class QuestionBlockController extends Component {
 
     @property
     public mushroomMoveSpeed = 3;
+
+    @property
+    public scoreValue = 100;
 
     private sprite: Sprite | null = null;
     private body: RigidBody2D | null = null;
@@ -148,13 +152,14 @@ export class QuestionBlockController extends Component {
             return;
         }
 
-        this.activateBlock();
+        this.activateBlock(player);
     }
 
-    private activateBlock(): void {
+    private activateBlock(player: PlayerController): void {
         this.used = true;
         this.bouncing = true;
         this.spawnMushroomFromBlock();
+        ScoreHudText.addToActiveScore(this.scoreValue, this.getScorePopupWorldPosition(player));
 
         if (this.sprite && this.usedFrame) {
             this.sprite.spriteFrame = this.usedFrame;
@@ -176,6 +181,12 @@ export class QuestionBlockController extends Component {
                 this.bouncing = false;
             })
             .start();
+    }
+
+    private getScorePopupWorldPosition(player: PlayerController): Vec3 {
+        const position = player.node.worldPosition.clone();
+        position.y += 28;
+        return position;
     }
 
     private spawnMushroomFromBlock(): void {
