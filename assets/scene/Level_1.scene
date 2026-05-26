@@ -1474,6 +1474,10 @@
     "fallResetY": -300,
     "fallResetDistance": 160,
     "useFallResetDistance": false,
+    "camera": {
+      "__id__": 4
+    },
+    "outOfViewDeathMargin": 32,
     "debugPhysicsPosition": false,
     "showColliderDebug": true,
     "showGroundSensorDebug": false,
@@ -1486,6 +1490,12 @@
     "groundSensorHeight": 5,
     "groundSensorOffsetY": -1,
     "oneWayGroundSnapTolerance": 4,
+    "diedFrame": {
+      "__uuid__": "aedb291f-989a-4ce2-9d07-4d8264a34ae1@f4d7d",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "deathBounceSpeed": 9,
+    "deathSceneDelay": 1.2,
     "bigBodySize": {
       "__type__": "cc.Vec2",
       "x": 18,

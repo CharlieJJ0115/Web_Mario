@@ -1,6 +1,7 @@
 import {
     _decorator,
     BoxCollider2D,
+    Camera,
     Collider2D,
     Component,
     Contact2DType,
@@ -56,6 +57,12 @@ export class PlayerController extends Component {
     @property
     public useFallResetDistance = false;
 
+    @property(Camera)
+    public camera: Camera | null = null;
+
+    @property
+    public outOfViewDeathMargin = 32;
+
     @property
     public debugPhysicsPosition = true;
 
@@ -85,6 +92,15 @@ export class PlayerController extends Component {
 
     @property
     public oneWayGroundSnapTolerance = 4;
+
+    @property(SpriteFrame)
+    public diedFrame: SpriteFrame | null = null;
+
+    @property
+    public deathBounceSpeed = 260;
+
+    @property
+    public deathSceneDelay = 1.2;
 
     @property(Vec2)
     public bigBodySize = new Vec2(18, 27);
@@ -158,6 +174,8 @@ export class PlayerController extends Component {
     private damageInvulnerableElapsed = 0;
     private damageQueued = false;
     private deathFlowQueued = false;
+    private isDying = false;
+    private pendingDeathSceneName = '';
     private smallColliderSize = new Vec2();
     private smallColliderOffset = new Vec2();
     private hasCapturedSmallCollider = false;
@@ -334,8 +352,20 @@ export class PlayerController extends Component {
         }
 
         this.ensureVisible();
+        if (this.isDying) {
+            this.updateColliderDebug();
+            this.monitorPhysicsPosition(deltaTime);
+            return;
+        }
+
         this.updateDamageInvulnerability(deltaTime);
         this.applyPhysicsMovement();
+        if (this.isDying) {
+            this.updateColliderDebug();
+            this.monitorPhysicsPosition(deltaTime);
+            return;
+        }
+
         this.refreshOneWayPlatformGroundedFallback();
         this.updatePlayerAnimation(deltaTime);
         this.updateColliderDebug();
@@ -396,7 +426,7 @@ export class PlayerController extends Component {
             return;
         }
 
-        if (this.shouldResetAfterFall()) {
+        if (this.shouldStartDeathByFall()) {
             this.resetAfterFall();
             return;
         }
@@ -724,9 +754,10 @@ export class PlayerController extends Component {
         const shouldContinue = GameFlowState.loseLifeAndCheckContinue(fallbackLives);
         this.lifeHud?.setLives(GameFlowState.currentLives);
 
-        director.loadScene(shouldContinue
+        this.pendingDeathSceneName = shouldContinue
             ? GameFlowState.gameStartSceneName
-            : GameFlowState.gameOverSceneName);
+            : GameFlowState.gameOverSceneName;
+        this.startDeathAnimation();
     }
 
     private syncLifeHudFromGameFlow(): void {
@@ -736,6 +767,46 @@ export class PlayerController extends Component {
 
         this.lifeHud?.setLives(GameFlowState.currentLives);
     }
+
+    private startDeathAnimation(): void {
+        this.isDying = true;
+        this.damageQueued = false;
+        this.growQueued = false;
+        this.countedGroundContacts.clear();
+        this.groundedContacts = 0;
+        this.jumpQueued = false;
+        this.pressedKeys.clear();
+        this.moveAxis = 0;
+
+        const visual = this.resolveVisualNode();
+        visual.setScale(Math.abs(visual.scale.x || 1), visual.scale.y, visual.scale.z);
+        if (this.visualSprite && this.diedFrame) {
+            this.visualSprite.spriteFrame = this.diedFrame;
+        }
+
+        if (this.mainCollider) {
+            this.mainCollider.enabled = false;
+        }
+        if (this.groundSensor) {
+            this.groundSensor.enabled = false;
+        }
+
+        if (this.body) {
+            this.body.gravityScale = 1;
+            this.body.fixedRotation = true;
+            this.setBodyVelocity(new Vec2(0, Math.max(this.deathBounceSpeed, 0)));
+        }
+
+        this.scheduleOnce(this.finishDeathFlow, Math.max(this.deathSceneDelay, 0));
+    }
+
+    private readonly finishDeathFlow = (): void => {
+        if (!this.pendingDeathSceneName) {
+            return;
+        }
+
+        director.loadScene(this.pendingDeathSceneName);
+    };
 
     private monitorPhysicsPosition(deltaTime: number): void {
         if (!this.debugPhysicsPosition) {
@@ -830,7 +901,12 @@ export class PlayerController extends Component {
         graphics.stroke();
     }
 
-    private shouldResetAfterFall(): boolean {
+    private shouldStartDeathByFall(): boolean {
+        if (this.camera) {
+            const cameraBottom = this.camera.node.worldPosition.y - this.camera.orthoHeight;
+            return this.node.worldPosition.y < cameraBottom - Math.max(this.outOfViewDeathMargin, 0);
+        }
+
         const resetByAbsoluteY = this.node.worldPosition.y < this.fallResetY;
         const resetByDistance = this.useFallResetDistance
             && this.fallResetDistance > 0
