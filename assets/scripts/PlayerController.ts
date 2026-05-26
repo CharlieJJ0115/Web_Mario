@@ -21,22 +21,22 @@ import {
     Vec3,
     isValid,
 } from 'cc';
+import { EDITOR } from 'cc/env';
 import { OneWayPlatformController } from './OneWayPlatformController';
 
 const { ccclass, property } = _decorator;
+const { executeInEditMode } = _decorator;
 
 type PlayerAnimationState = 'idle' | 'walk' | 'jump' | 'fall';
 
 @ccclass('PlayerController')
+@executeInEditMode
 export class PlayerController extends Component {
     @property
     public moveSpeed = 240;
 
     @property
     public jumpSpeed = 420;
-
-    @property(Vec2)
-    public bodySize = new Vec2(14, 16);
 
     @property
     public debugInput = true;
@@ -141,6 +141,8 @@ export class PlayerController extends Component {
     private fallbackSpriteFrame: SpriteFrame | null = null;
     private isBigMario = false;
     private growQueued = false;
+    private readonly defaultSmallColliderSize = new Vec2(14, 16);
+    private readonly defaultSmallColliderOffset = new Vec2(0, 8);
 
     public get isGrounded(): boolean {
         return this.groundedContacts > 0;
@@ -151,6 +153,12 @@ export class PlayerController extends Component {
     }
 
     protected onLoad(): void {
+        if (EDITOR) {
+            this.resolveExistingColliders();
+            this.updateColliderDebug();
+            return;
+        }
+
         console.log('[PlayerController] onLoad');
         this.resolveVisualNode();
         this.warnIfStaticMobility();
@@ -159,11 +167,20 @@ export class PlayerController extends Component {
     }
 
     protected start(): void {
+        if (EDITOR) {
+            return;
+        }
+
         this.fallResetPosition = this.node.worldPosition.clone();
         console.log(
             `[PlayerController] start world=(${this.node.worldPosition.x.toFixed(1)}, ${this.node.worldPosition.y.toFixed(1)}, ${this.node.worldPosition.z.toFixed(1)}) `
             + `body=${this.body ? 'ready' : 'missing'} collider=${this.mainCollider ? 'ready' : 'missing'}`,
         );
+    }
+
+    protected onValidate(): void {
+        this.resolveExistingColliders();
+        this.updateColliderDebug();
     }
 
     public setFallResetY(resetY: number): void {
@@ -204,7 +221,6 @@ export class PlayerController extends Component {
         }
 
         this.isBigMario = true;
-        this.bodySize.set(this.bigBodySize.x, this.bigBodySize.y);
         this.visualOffsetY = this.bigVisualOffsetY;
         this.groundSensorHeight = this.bigGroundSensorHeight;
         this.groundSensorOffsetY = this.bigGroundSensorOffsetY;
@@ -236,6 +252,12 @@ export class PlayerController extends Component {
     }
 
     protected update(deltaTime: number): void {
+        if (EDITOR) {
+            this.resolveExistingColliders();
+            this.updateColliderDebug();
+            return;
+        }
+
         this.ensureVisible();
         this.applyPhysicsMovement();
         this.updatePlayerAnimation(deltaTime);
@@ -269,9 +291,7 @@ export class PlayerController extends Component {
 
     private setupPhysicsComponents(): void {
         this.body = this.node.getComponent(RigidBody2D);
-        const colliders = this.node.getComponents(BoxCollider2D);
-        this.mainCollider = colliders.find((collider) => !collider.sensor) ?? colliders[0] ?? null;
-        this.groundSensor = colliders.find((collider) => collider.sensor && collider !== this.mainCollider) ?? null;
+        this.resolveExistingColliders();
 
         if (!this.body) {
             this.body = this.node.addComponent(RigidBody2D);
@@ -279,6 +299,8 @@ export class PlayerController extends Component {
 
         if (!this.mainCollider) {
             this.mainCollider = this.node.addComponent(BoxCollider2D);
+            this.mainCollider.size = new Size(this.defaultSmallColliderSize.x, this.defaultSmallColliderSize.y);
+            this.mainCollider.offset = this.defaultSmallColliderOffset.clone();
         }
 
         if (!this.groundSensor) {
@@ -296,12 +318,19 @@ export class PlayerController extends Component {
 
         this.physicsReady = true;
         this.updateColliderDebug();
-        const groundSensorWidth = this.bodySize.x * 0.8;
+        const mainColliderSize = this.mainCollider?.size ?? new Size(this.defaultSmallColliderSize.x, this.defaultSmallColliderSize.y);
+        const groundSensorWidth = mainColliderSize.width * 0.8;
         console.log(
             `[PlayerController] Physics components ready type=Dynamic fixedRotation=true gravityScale=1 `
-            + `colliderSize=${this.bodySize.x}x${this.bodySize.y} offset=(0, ${this.bodySize.y * 0.5}) `
+            + `colliderSize=${mainColliderSize.width}x${mainColliderSize.height} offset=(${this.mainCollider?.offset.x ?? 0}, ${this.mainCollider?.offset.y ?? 0}) `
             + `groundSensor=${groundSensorWidth.toFixed(1)}x${this.groundSensorHeight} offset=(0, ${this.groundSensorOffsetY})`,
         );
+    }
+
+    private resolveExistingColliders(): void {
+        const colliders = this.node.getComponents(BoxCollider2D);
+        this.mainCollider = colliders.find((collider) => !collider.sensor) ?? null;
+        this.groundSensor = colliders.find((collider) => collider.sensor && collider !== this.mainCollider) ?? null;
     }
 
     private configureColliderShapes(): void {
@@ -310,14 +339,16 @@ export class PlayerController extends Component {
         }
 
         this.mainCollider.sensor = false;
-        this.mainCollider.size = new Size(this.bodySize.x, this.bodySize.y);
-        this.mainCollider.offset = new Vec2(0, this.bodySize.y * 0.5);
+        if (this.isBigMario) {
+            this.mainCollider.size = new Size(this.bigBodySize.x, this.bigBodySize.y);
+            this.mainCollider.offset = new Vec2(0, this.bigBodySize.y * 0.5);
+        }
         this.mainCollider.density = 1;
         this.mainCollider.friction = 0;
         this.mainCollider.restitution = 0;
         this.mainCollider.apply();
 
-        const groundSensorWidth = this.bodySize.x * 0.8;
+        const groundSensorWidth = this.mainCollider.size.width * 0.8;
         this.groundSensor.sensor = true;
         this.groundSensor.size = new Size(groundSensorWidth, this.groundSensorHeight);
         this.groundSensor.offset = new Vec2(0, this.groundSensorOffsetY);
