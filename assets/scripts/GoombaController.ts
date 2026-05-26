@@ -1,19 +1,23 @@
 import {
     _decorator,
     BoxCollider2D,
+    Collider2D,
     Color,
     Component,
+    Contact2DType,
     ERigidBody2DType,
     Graphics,
     Node,
     RigidBody2D,
     Size,
     Sprite,
+    SpriteFrame,
     UITransform,
     Vec2,
     isValid,
 } from 'cc';
 import { EDITOR } from 'cc/env';
+import { PlayerController } from './PlayerController';
 
 const { ccclass, executeInEditMode, property } = _decorator;
 
@@ -44,6 +48,18 @@ export class GoombaController extends Component {
     @property
     public showColliderDebug = false;
 
+    @property(SpriteFrame)
+    public deadFrame: SpriteFrame | null = null;
+
+    @property
+    public stompTolerance = 3;
+
+    @property
+    public stompBounceSpeed = 180;
+
+    @property
+    public destroyBelowY = -300;
+
     private body: RigidBody2D | null = null;
     private collider: BoxCollider2D | null = null;
     private sprite: Sprite | null = null;
@@ -52,6 +68,9 @@ export class GoombaController extends Component {
     private mirrorFrame = false;
     private baseVisualScaleX = 1;
     private moveDirection = -1;
+    private isDead = false;
+    private stompDeathQueued = false;
+    private pendingStompPlayer: PlayerController | null = null;
 
     protected onLoad(): void {
         this.moveDirection = this.normalizeDirection(this.startDirection);
@@ -70,10 +89,20 @@ export class GoombaController extends Component {
             return;
         }
 
+        if (this.isDead) {
+            this.destroyIfBelowScreen();
+            return;
+        }
+
         this.updateDirectionFromWaypoints();
         this.applyMovement();
         this.updateWalkMirrorAnimation(deltaTime);
         this.updateColliderDebug();
+    }
+
+    protected onDestroy(): void {
+        this.collider?.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+        this.pendingStompPlayer = null;
     }
 
     private setupComponents(): void {
@@ -96,6 +125,7 @@ export class GoombaController extends Component {
         this.body.gravityScale = 1;
 
         this.resolveCollider();
+        this.registerContactListener();
         this.updateColliderDebug();
     }
 
@@ -123,6 +153,82 @@ export class GoombaController extends Component {
         }
 
         return this.collider;
+    }
+
+    private registerContactListener(): void {
+        if (!this.collider) {
+            return;
+        }
+
+        this.collider.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+        this.collider.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+    }
+
+    private onBeginContact(_selfCollider: Collider2D, otherCollider: Collider2D): void {
+        if (this.isDead || this.stompDeathQueued || otherCollider.sensor) {
+            return;
+        }
+
+        const player = otherCollider.node.getComponent(PlayerController);
+        if (!player || !this.isStompedBy(player)) {
+            return;
+        }
+
+        this.queueStompDeath(player);
+    }
+
+    private isStompedBy(player: PlayerController): boolean {
+        if (!this.collider || player.getVerticalVelocity() > 0) {
+            return false;
+        }
+
+        const goombaTopY = this.node.worldPosition.y + this.collider.offset.y + this.collider.size.height * 0.5;
+        return player.getFootWorldY() >= goombaTopY - Math.max(this.stompTolerance, 0);
+    }
+
+    private queueStompDeath(player: PlayerController): void {
+        if (this.isDead || this.stompDeathQueued) {
+            return;
+        }
+
+        this.stompDeathQueued = true;
+        this.pendingStompPlayer = player;
+        this.scheduleOnce(this.applyStompDeath, 0);
+    }
+
+    private readonly applyStompDeath = (): void => {
+        if (this.isDead) {
+            return;
+        }
+
+        const player = this.pendingStompPlayer;
+        this.pendingStompPlayer = null;
+        this.isDead = true;
+        player?.bounceAfterStomp(this.stompBounceSpeed);
+
+        if (this.sprite && this.deadFrame) {
+            this.sprite.spriteFrame = this.deadFrame;
+        }
+
+        this.collider?.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+        if (this.collider) {
+            this.collider.enabled = false;
+        }
+        if (this.colliderDebugNode) {
+            this.colliderDebugNode.active = false;
+        }
+
+        if (this.body) {
+            this.body.gravityScale = 1;
+            this.body.fixedRotation = true;
+            this.setBodyVelocity(new Vec2(0, 0));
+        }
+    };
+
+    private destroyIfBelowScreen(): void {
+        if (this.node.worldPosition.y < this.destroyBelowY) {
+            this.node.destroy();
+        }
     }
 
     private applyMovement(): void {

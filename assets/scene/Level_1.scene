@@ -1057,6 +1057,13 @@
     "useWaypoints": true,
     "waypointTolerance": 1,
     "showColliderDebug": false,
+    "deadFrame": {
+      "__uuid__": "38ff816f-34d8-4eb9-ac3d-2976bd6d01f5@eae3c",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "stompTolerance": 3,
+    "stompBounceSpeed": 3,
+    "destroyBelowY": -300,
     "_id": "31VBjYkutLAY8WyeYV4mhj"
   },
   {

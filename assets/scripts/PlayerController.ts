@@ -199,6 +199,19 @@ export class PlayerController extends Component {
         return this.body?.linearVelocity.y ?? 0;
     }
 
+    public bounceAfterStomp(speed: number): void {
+        if (!this.body) {
+            return;
+        }
+
+        const velocity = this.body.linearVelocity.clone();
+        velocity.y = Math.max(velocity.y, speed);
+        this.setBodyVelocity(velocity);
+        this.countedGroundContacts.clear();
+        this.groundedContacts = 0;
+        this.jumpQueued = false;
+    }
+
     public canStandOnOneWayPlatform(platformTopY: number, tolerance = 2): boolean {
         return this.getFootWorldY() >= platformTopY - tolerance
             && this.getVerticalVelocity() <= 0;
