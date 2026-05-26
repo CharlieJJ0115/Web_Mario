@@ -81,6 +81,9 @@ export class PlayerController extends Component {
     @property
     public groundSensorOffsetY = -1;
 
+    @property
+    public oneWayGroundSnapTolerance = 4;
+
     @property(Vec2)
     public bigBodySize = new Vec2(18, 27);
 
@@ -155,6 +158,7 @@ export class PlayerController extends Component {
     private smallColliderSize = new Vec2();
     private smallColliderOffset = new Vec2();
     private hasCapturedSmallCollider = false;
+    private oneWayPlatforms: OneWayPlatformController[] = [];
 
     public get isGrounded(): boolean {
         return this.groundedContacts > 0;
@@ -175,6 +179,7 @@ export class PlayerController extends Component {
         this.resolveVisualNode();
         this.warnIfStaticMobility();
         this.setupPhysicsComponents();
+        this.collectOneWayPlatforms();
         this.registerInput();
     }
 
@@ -327,6 +332,7 @@ export class PlayerController extends Component {
         this.ensureVisible();
         this.updateDamageInvulnerability(deltaTime);
         this.applyPhysicsMovement();
+        this.refreshOneWayPlatformGroundedFallback();
         this.updatePlayerAnimation(deltaTime);
         this.updateColliderDebug();
         this.monitorPhysicsPosition(deltaTime);
@@ -338,6 +344,47 @@ export class PlayerController extends Component {
         }
 
         this.damageInvulnerableElapsed = Math.max(0, this.damageInvulnerableElapsed - deltaTime);
+    }
+
+    private collectOneWayPlatforms(): void {
+        this.oneWayPlatforms = [];
+        let root: Node = this.node;
+        while (root.parent) {
+            root = root.parent;
+        }
+        this.collectOneWayPlatformsFromNode(root);
+    }
+
+    private collectOneWayPlatformsFromNode(node: Node): void {
+        const platform = node.getComponent(OneWayPlatformController);
+        if (platform) {
+            this.oneWayPlatforms.push(platform);
+        }
+
+        for (const child of node.children) {
+            this.collectOneWayPlatformsFromNode(child);
+        }
+    }
+
+    private refreshOneWayPlatformGroundedFallback(): void {
+        if (this.isGrounded || this.getVerticalVelocity() > 0) {
+            return;
+        }
+
+        if (this.oneWayPlatforms.length === 0) {
+            this.collectOneWayPlatforms();
+        }
+
+        const footY = this.getFootWorldY();
+        const tolerance = Math.max(this.oneWayGroundSnapTolerance, 0);
+        const standingOnOneWay = this.oneWayPlatforms.some((platform) => (
+            platform.containsWorldX(this.node.worldPosition.x)
+            && Math.abs(footY - platform.getPlatformTopWorldY()) <= tolerance
+        ));
+
+        if (standingOnOneWay) {
+            this.groundedContacts = Math.max(this.groundedContacts, 1);
+        }
     }
 
     private applyPhysicsMovement(): void {
@@ -851,7 +898,7 @@ export class PlayerController extends Component {
 
         return this.canStandOnOneWayPlatform(
             oneWayPlatform.getPlatformTopWorldY(),
-            oneWayPlatform.surfaceTolerance,
+            Math.max(oneWayPlatform.surfaceTolerance, 3),
         );
     }
 

@@ -25,7 +25,11 @@ export class OneWayPlatformController extends Component {
     @property
     public topColliderHeight = 2;
 
+    @property
+    public stickTolerance = 4;
+
     private collider: BoxCollider2D | null = null;
+    private landedBodies = new Set<RigidBody2D>();
 
     protected onLoad(): void {
         this.resolveCollider();
@@ -35,6 +39,8 @@ export class OneWayPlatformController extends Component {
 
     protected onDestroy(): void {
         this.collider?.off(Contact2DType.PRE_SOLVE, this.onPreSolve, this);
+        this.collider?.off(Contact2DType.END_CONTACT, this.onEndContact, this);
+        this.landedBodies.clear();
     }
 
     public configure(size: Size): void {
@@ -91,6 +97,8 @@ export class OneWayPlatformController extends Component {
 
         collider.off(Contact2DType.PRE_SOLVE, this.onPreSolve, this);
         collider.on(Contact2DType.PRE_SOLVE, this.onPreSolve, this);
+        collider.off(Contact2DType.END_CONTACT, this.onEndContact, this);
+        collider.on(Contact2DType.END_CONTACT, this.onEndContact, this);
     }
 
     private onPreSolve(selfCollider: Collider2D, otherCollider: Collider2D, contact: IPhysics2DContact | null): void {
@@ -99,19 +107,51 @@ export class OneWayPlatformController extends Component {
         }
 
         const body = otherCollider.node.getComponent(RigidBody2D);
-        if (!body || otherCollider.sensor || !this.shouldCollideWith(otherCollider, body)) {
+        if (otherCollider.sensor) {
             contact.disabledOnce = true;
+            return;
+        }
+
+        if (!body || !this.shouldCollideWith(otherCollider, body)) {
+            if (body) {
+                this.landedBodies.delete(body);
+            }
+            contact.disabledOnce = true;
+        }
+    }
+
+    private onEndContact(_selfCollider: Collider2D, otherCollider: Collider2D): void {
+        if (otherCollider.sensor) {
+            return;
+        }
+
+        const body = otherCollider.node.getComponent(RigidBody2D);
+        if (body) {
+            this.landedBodies.delete(body);
         }
     }
 
     private shouldCollideWith(otherCollider: Collider2D, body: RigidBody2D): boolean {
         if (body.linearVelocity.y > 0) {
+            this.landedBodies.delete(body);
             return false;
         }
 
         const bottomY = this.getOtherColliderBottomWorldY(otherCollider);
         const platformTopY = this.getPlatformTopWorldY();
-        return bottomY >= platformTopY - this.surfaceTolerance;
+        if (this.landedBodies.has(body)) {
+            const stillOnTop = bottomY >= platformTopY - Math.max(this.stickTolerance, this.surfaceTolerance);
+            if (!stillOnTop) {
+                this.landedBodies.delete(body);
+            }
+            return stillOnTop;
+        }
+
+        const canLand = bottomY >= platformTopY - this.surfaceTolerance;
+        if (canLand) {
+            this.landedBodies.add(body);
+        }
+        return canLand;
     }
 
     private getOtherColliderBottomWorldY(otherCollider: Collider2D): number {

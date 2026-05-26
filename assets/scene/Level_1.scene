@@ -1480,6 +1480,7 @@
     "visualOffsetY": 8,
     "groundSensorHeight": 5,
     "groundSensorOffsetY": -1,
+    "oneWayGroundSnapTolerance": 4,
     "bigBodySize": {
       "__type__": "cc.Vec2",
       "x": 18,
