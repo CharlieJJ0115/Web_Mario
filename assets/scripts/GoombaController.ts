@@ -170,11 +170,16 @@ export class GoombaController extends Component {
         }
 
         const player = otherCollider.node.getComponent(PlayerController);
-        if (!player || !this.isStompedBy(player)) {
+        if (!player) {
             return;
         }
 
-        this.queueStompDeath(player);
+        if (this.isStompedBy(player)) {
+            this.queueStompDeath(player);
+            return;
+        }
+
+        player.takeDamage();
     }
 
     private isStompedBy(player: PlayerController): boolean {

@@ -22,6 +22,7 @@ import {
     isValid,
 } from 'cc';
 import { EDITOR } from 'cc/env';
+import { LifeHudText } from './LifeHudText';
 import { OneWayPlatformController } from './OneWayPlatformController';
 
 const { ccclass, property } = _decorator;
@@ -61,6 +62,12 @@ export class PlayerController extends Component {
 
     @property
     public showGroundSensorDebug = false;
+
+    @property(LifeHudText)
+    public lifeHud: LifeHudText | null = null;
+
+    @property
+    public damageInvulnerableDuration = 1;
 
     @property
     public visualNodeName = 'Visual';
@@ -143,6 +150,11 @@ export class PlayerController extends Component {
     private growQueued = false;
     private readonly defaultSmallColliderSize = new Vec2(14, 16);
     private readonly defaultSmallColliderOffset = new Vec2(0, 8);
+    private damageInvulnerableElapsed = 0;
+    private damageQueued = false;
+    private smallColliderSize = new Vec2();
+    private smallColliderOffset = new Vec2();
+    private hasCapturedSmallCollider = false;
 
     public get isGrounded(): boolean {
         return this.groundedContacts > 0;
@@ -212,6 +224,28 @@ export class PlayerController extends Component {
         this.jumpQueued = false;
     }
 
+    public takeDamage(): boolean {
+        if (this.damageInvulnerableElapsed > 0 || this.damageQueued) {
+            return false;
+        }
+
+        this.damageQueued = true;
+        this.scheduleOnce(this.applyQueuedDamage, 0);
+        return true;
+    }
+
+    private readonly applyQueuedDamage = (): void => {
+        this.damageQueued = false;
+
+        if (this.isBigMario) {
+            this.shrinkToSmallMario();
+        } else {
+            this.lifeHud?.addLives(-1);
+        }
+
+        this.damageInvulnerableElapsed = Math.max(this.damageInvulnerableDuration, 0);
+    };
+
     public canStandOnOneWayPlatform(platformTopY: number, tolerance = 2): boolean {
         return this.getFootWorldY() >= platformTopY - tolerance
             && this.getVerticalVelocity() <= 0;
@@ -248,7 +282,26 @@ export class PlayerController extends Component {
         console.log('[PlayerController] Mario grew into big Mario.');
     };
 
+    private shrinkToSmallMario(): void {
+        if (!this.isBigMario) {
+            return;
+        }
+
+        this.isBigMario = false;
+        this.visualOffsetY = 8;
+        this.groundSensorHeight = 3;
+        this.groundSensorOffsetY = -1;
+
+        const visual = this.resolveVisualNode();
+        visual.setPosition(0, this.visualOffsetY, 0);
+        this.configureColliderShapes();
+        this.resetAnimationPlayback();
+        this.updatePlayerAnimation(0);
+        this.updateColliderDebug();
+    }
+
     protected onDestroy(): void {
+        this.damageQueued = false;
         input.off(Input.EventType.KEY_DOWN, this.onKeyDown, this);
         input.off(Input.EventType.KEY_UP, this.onKeyUp, this);
         this.unregisterBrowserKeyboardFallback();
@@ -272,10 +325,19 @@ export class PlayerController extends Component {
         }
 
         this.ensureVisible();
+        this.updateDamageInvulnerability(deltaTime);
         this.applyPhysicsMovement();
         this.updatePlayerAnimation(deltaTime);
         this.updateColliderDebug();
         this.monitorPhysicsPosition(deltaTime);
+    }
+
+    private updateDamageInvulnerability(deltaTime: number): void {
+        if (this.damageInvulnerableElapsed <= 0) {
+            return;
+        }
+
+        this.damageInvulnerableElapsed = Math.max(0, this.damageInvulnerableElapsed - deltaTime);
     }
 
     private applyPhysicsMovement(): void {
@@ -315,6 +377,7 @@ export class PlayerController extends Component {
             this.mainCollider.size = new Size(this.defaultSmallColliderSize.x, this.defaultSmallColliderSize.y);
             this.mainCollider.offset = this.defaultSmallColliderOffset.clone();
         }
+        this.captureSmallColliderSettings();
 
         if (!this.groundSensor) {
             this.groundSensor = this.node.addComponent(BoxCollider2D);
@@ -346,6 +409,31 @@ export class PlayerController extends Component {
         this.groundSensor = colliders.find((collider) => collider.sensor && collider !== this.mainCollider) ?? null;
     }
 
+    private captureSmallColliderSettings(): void {
+        if (this.hasCapturedSmallCollider || this.isBigMario || !this.mainCollider) {
+            return;
+        }
+
+        this.smallColliderSize.set(this.mainCollider.size.width, this.mainCollider.size.height);
+        this.smallColliderOffset.set(this.mainCollider.offset.x, this.mainCollider.offset.y);
+        this.hasCapturedSmallCollider = true;
+    }
+
+    private applySmallColliderSettings(): void {
+        if (!this.mainCollider) {
+            return;
+        }
+
+        const width = this.hasCapturedSmallCollider ? this.smallColliderSize.x : this.defaultSmallColliderSize.x;
+        const height = this.hasCapturedSmallCollider ? this.smallColliderSize.y : this.defaultSmallColliderSize.y;
+        const offsetX = this.hasCapturedSmallCollider ? this.smallColliderOffset.x : this.defaultSmallColliderOffset.x;
+        const offsetY = this.hasCapturedSmallCollider ? this.smallColliderOffset.y : this.defaultSmallColliderOffset.y;
+
+        this.mainCollider.size = new Size(width, height);
+        this.mainCollider.offset = new Vec2(offsetX, offsetY);
+        this.mainCollider.apply();
+    }
+
     private configureColliderShapes(): void {
         if (!this.mainCollider || !this.groundSensor) {
             return;
@@ -355,6 +443,8 @@ export class PlayerController extends Component {
         if (this.isBigMario) {
             this.mainCollider.size = new Size(this.bigBodySize.x, this.bigBodySize.y);
             this.mainCollider.offset = new Vec2(0, this.bigBodySize.y * 0.5);
+        } else {
+            this.applySmallColliderSettings();
         }
         this.mainCollider.density = 1;
         this.mainCollider.friction = 0;
