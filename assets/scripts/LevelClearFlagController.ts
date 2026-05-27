@@ -17,6 +17,8 @@ import {
     Vec3,
 } from 'cc';
 import { GameFlowState } from './GameFlowState';
+import { AuthSession } from './AuthSession';
+import { FirestorePlayerService } from './FirestorePlayerService';
 import { PlayerController } from './PlayerController';
 import { ScoreHudText } from './ScoreHudText';
 import { TimerHudText } from './TimerHudText';
@@ -186,6 +188,7 @@ export class LevelClearFlagController extends Component {
         timer?.pauseTimer();
 
         const bonusScore = this.applyTimerBonus(remainingSeconds);
+        this.saveHighScoreIfNeeded();
         this.playLevelClearSound();
         this.showLevelClearOverlay(remainingSeconds, bonusScore);
         this.scheduleOnce(this.redirectAfterClear, Math.max(this.redirectDelaySeconds, 0));
@@ -212,6 +215,18 @@ export class LevelClearFlagController extends Component {
             ScoreHudText.addToActiveScoreAmount(bonus);
         }
         return bonus;
+    }
+
+    private saveHighScoreIfNeeded(): void {
+        const session = AuthSession.getCurrentUser();
+        if (!session) {
+            return;
+        }
+
+        const finalScore = ScoreHudText.getActiveScore()?.getScore() ?? 0;
+        void FirestorePlayerService.updateHighScoreIfBetter(session, finalScore).catch((error: unknown) => {
+            console.warn('[LevelClearFlagController] Failed to update Firestore high score.', error);
+        });
     }
 
     private playLevelClearSound(): void {
