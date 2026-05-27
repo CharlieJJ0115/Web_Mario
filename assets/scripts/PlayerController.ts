@@ -193,6 +193,7 @@ export class PlayerController extends Component {
     private damageQueued = false;
     private deathFlowQueued = false;
     private isDying = false;
+    private isLevelClear = false;
     private pendingDeathSceneName = '';
     private smallColliderSize = new Vec2();
     private smallColliderOffset = new Vec2();
@@ -258,6 +259,10 @@ export class PlayerController extends Component {
     }
 
     public bounceAfterStomp(speed: number): void {
+        if (this.isLevelClear) {
+            return;
+        }
+
         if (!this.body) {
             return;
         }
@@ -271,7 +276,7 @@ export class PlayerController extends Component {
     }
 
     public takeDamage(): boolean {
-        if (this.damageInvulnerableElapsed > 0 || this.damageQueued) {
+        if (this.isLevelClear || this.damageInvulnerableElapsed > 0 || this.damageQueued) {
             return false;
         }
 
@@ -282,6 +287,10 @@ export class PlayerController extends Component {
 
     private readonly applyQueuedDamage = (): void => {
         this.damageQueued = false;
+
+        if (this.isLevelClear) {
+            return;
+        }
 
         if (this.isBigMario) {
             this.shrinkToSmallMario();
@@ -297,7 +306,7 @@ export class PlayerController extends Component {
     }
 
     public tryGrowBig(): boolean {
-        if (this.isBigMario || this.growQueued) {
+        if (this.isLevelClear || this.isBigMario || this.growQueued) {
             return false;
         }
 
@@ -308,7 +317,7 @@ export class PlayerController extends Component {
 
     private readonly applyGrowBig = (): void => {
         this.growQueued = false;
-        if (this.isBigMario) {
+        if (this.isLevelClear || this.isBigMario) {
             return;
         }
 
@@ -347,6 +356,35 @@ export class PlayerController extends Component {
         this.playSfx(this.shrinkSound);
     }
 
+    public enterLevelClearState(): boolean {
+        if (this.isLevelClear || this.isDying) {
+            return false;
+        }
+
+        this.isLevelClear = true;
+        this.damageQueued = false;
+        this.deathFlowQueued = false;
+        this.growQueued = false;
+        this.pendingDeathSceneName = '';
+        this.countedGroundContacts.clear();
+        this.jumpQueued = false;
+        this.pressedKeys.clear();
+        this.moveAxis = 0;
+        this.lastLoggedMoveAxis = 0;
+
+        if (this.body) {
+            this.body.gravityScale = 0;
+            this.setBodyVelocity(new Vec2(0, 0));
+        }
+
+        this.unregisterBrowserKeyboardFallback();
+        input.off(Input.EventType.KEY_DOWN, this.onKeyDown, this);
+        input.off(Input.EventType.KEY_UP, this.onKeyUp, this);
+        this.resetAnimationPlayback();
+        this.updatePlayerAnimation(0);
+        return true;
+    }
+
     protected onDestroy(): void {
         this.damageQueued = false;
         this.deathFlowQueued = false;
@@ -373,6 +411,14 @@ export class PlayerController extends Component {
         }
 
         this.ensureVisible();
+        if (this.isLevelClear) {
+            this.setBodyVelocity(new Vec2(0, 0));
+            this.updatePlayerAnimation(deltaTime);
+            this.updateColliderDebug();
+            this.monitorPhysicsPosition(deltaTime);
+            return;
+        }
+
         if (this.isDying) {
             this.updateColliderDebug();
             this.monitorPhysicsPosition(deltaTime);
@@ -760,7 +806,7 @@ export class PlayerController extends Component {
     }
 
     private requestDeathFlow(): void {
-        if (this.deathFlowQueued) {
+        if (this.isLevelClear || this.deathFlowQueued) {
             return;
         }
 
@@ -975,6 +1021,10 @@ export class PlayerController extends Component {
     }
 
     private setKeyState(keyCode: KeyCode, pressed: boolean, source: string): void {
+        if (this.isLevelClear) {
+            return;
+        }
+
         if (pressed) {
             this.pressedKeys.add(keyCode);
         } else {

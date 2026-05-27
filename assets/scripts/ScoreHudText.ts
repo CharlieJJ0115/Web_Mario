@@ -53,6 +53,14 @@ export class ScoreHudText extends Component {
         this.activeInstance?.addScoreWithPopup(amount, worldPosition);
     }
 
+    public static addToActiveScoreAmount(amount: number): void {
+        this.activeInstance?.addScore(amount);
+    }
+
+    public static getActiveScore(): ScoreHudText | null {
+        return this.activeInstance;
+    }
+
     protected onLoad(): void {
         this.refresh();
     }

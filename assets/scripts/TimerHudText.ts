@@ -12,6 +12,8 @@ const { ccclass, executeInEditMode, property } = _decorator;
 @ccclass('TimerHudText')
 @executeInEditMode
 export class TimerHudText extends Component {
+    private static activeInstance: TimerHudText | null = null;
+
     @property(Label)
     public timerLabel: Label | null = null;
 
@@ -27,6 +29,11 @@ export class TimerHudText extends Component {
     private remainingSeconds = 300;
     private elapsed = 0;
     private gameOverTriggered = false;
+    private paused = false;
+
+    public static getActiveTimer(): TimerHudText | null {
+        return this.activeInstance;
+    }
 
     protected onLoad(): void {
         this.resetTimer();
@@ -34,7 +41,14 @@ export class TimerHudText extends Component {
     }
 
     protected onEnable(): void {
+        TimerHudText.activeInstance = this;
         this.refresh();
+    }
+
+    protected onDisable(): void {
+        if (TimerHudText.activeInstance === this) {
+            TimerHudText.activeInstance = null;
+        }
     }
 
     protected start(): void {
@@ -46,6 +60,7 @@ export class TimerHudText extends Component {
 
         this.resetTimer();
         this.refresh();
+        TimerHudText.activeInstance = this;
     }
 
     protected onValidate(): void {
@@ -54,7 +69,7 @@ export class TimerHudText extends Component {
     }
 
     protected update(deltaTime: number): void {
-        if (EDITOR || this.gameOverTriggered || this.remainingSeconds <= 0) {
+        if (EDITOR || this.paused || this.gameOverTriggered || this.remainingSeconds <= 0) {
             return;
         }
 
@@ -75,6 +90,17 @@ export class TimerHudText extends Component {
         this.remainingSeconds = Math.max(0, Math.trunc(this.startSeconds));
         this.elapsed = 0;
         this.gameOverTriggered = false;
+        this.paused = false;
+    }
+
+    public pauseTimer(): void {
+        this.paused = true;
+        this.elapsed = 0;
+        this.refresh();
+    }
+
+    public getRemainingSeconds(): number {
+        return Math.max(0, Math.trunc(this.remainingSeconds));
     }
 
     private refresh(): void {
