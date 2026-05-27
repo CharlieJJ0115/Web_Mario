@@ -6,9 +6,18 @@ export type PlayerProfile = {
     highScore: number;
 };
 
+export type LeaderboardEntry = {
+    username: string;
+    highScore: number;
+};
+
 type FirestoreDocument = {
     fields?: Record<string, FirestoreValue>;
 };
+
+type FirestoreRunQueryResponse = Array<{
+    document?: FirestoreDocument;
+}>;
 
 type FirestoreValue = {
     stringValue?: string;
@@ -78,6 +87,43 @@ export class FirestorePlayerService {
         return normalizedScore;
     }
 
+    public static async getLeaderboard(session: AuthUserSession, limit = 3): Promise<LeaderboardEntry[]> {
+        this.requireSession(session);
+
+        const normalizedLimit = Math.max(1, Math.trunc(limit));
+        const response = await fetch(this.getRunQueryUrl(session), {
+            method: 'POST',
+            headers: this.getAuthHeaders(session),
+            body: JSON.stringify({
+                structuredQuery: {
+                    from: [
+                        {
+                            collectionId: 'users',
+                        },
+                    ],
+                    orderBy: [
+                        {
+                            field: {
+                                fieldPath: 'highScore',
+                            },
+                            direction: 'DESCENDING',
+                        },
+                    ],
+                    limit: normalizedLimit,
+                },
+            }),
+        });
+
+        const payload = await this.readJson(response);
+        if (!response.ok) {
+            throw new Error(this.getFirestoreErrorMessage(payload, 'Failed to read leaderboard.'));
+        }
+
+        return ((payload as FirestoreRunQueryResponse) ?? [])
+            .filter((row) => !!row.document)
+            .map((row) => this.toLeaderboardEntry(row.document!));
+    }
+
     private static async patchPlayerDocument(session: AuthUserSession, fields: Record<string, FirestoreValue>): Promise<void> {
         const response = await fetch(this.getPlayerDocumentUrl(session, Object.keys(fields)), {
             method: 'PATCH',
@@ -105,6 +151,11 @@ export class FirestorePlayerService {
         return `${baseUrl}?${query}`;
     }
 
+    private static getRunQueryUrl(session: AuthUserSession): string {
+        return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(session.projectId)}`
+            + '/databases/(default)/documents:runQuery';
+    }
+
     private static getAuthHeaders(session: AuthUserSession): Record<string, string> {
         return {
             Authorization: `Bearer ${session.idToken}`,
@@ -126,6 +177,14 @@ export class FirestorePlayerService {
         return {
             email: fields.email?.stringValue || session.email,
             username: fields.username?.stringValue || session.username || this.getFallbackUsername(session.email),
+            highScore: this.toInteger(fields.highScore?.integerValue),
+        };
+    }
+
+    private static toLeaderboardEntry(document: FirestoreDocument): LeaderboardEntry {
+        const fields = document.fields ?? {};
+        return {
+            username: fields.username?.stringValue || 'PLAYER',
             highScore: this.toInteger(fields.highScore?.integerValue),
         };
     }
