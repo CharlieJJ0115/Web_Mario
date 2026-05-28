@@ -40,6 +40,7 @@ export class LeaderBoardController extends Component {
     public emptyScoreText = '00000000';
 
     private loading = false;
+    private blockingButtonStates: boolean[] | null = null;
 
     protected onLoad(): void {
         this.closePanel();
@@ -48,7 +49,7 @@ export class LeaderBoardController extends Component {
     public openPanel(): void {
         this.setPanelActive(true);
         this.setOpenButtonInteractable(false);
-        this.setBlockingButtonsInteractable(false);
+        this.captureAndDisableBlockingButtons();
         this.clearRows();
         void this.loadLeaderboard();
     }
@@ -56,7 +57,7 @@ export class LeaderBoardController extends Component {
     public closePanel(): void {
         this.setPanelActive(false);
         this.setOpenButtonInteractable(true);
-        this.setBlockingButtonsInteractable(true);
+        this.restoreBlockingButtons();
     }
 
     private async loadLeaderboard(): Promise<void> {
@@ -146,11 +147,29 @@ export class LeaderBoardController extends Component {
         }
     }
 
-    private setBlockingButtonsInteractable(interactable: boolean): void {
+    private captureAndDisableBlockingButtons(): void {
+        this.blockingButtonStates = this.blockingButtons.map((button) => {
+            return button ? button.interactable : false;
+        });
+
         this.blockingButtons.forEach((button) => {
             if (button) {
-                button.interactable = interactable;
+                button.interactable = false;
             }
         });
+    }
+
+    private restoreBlockingButtons(): void {
+        if (!this.blockingButtonStates) {
+            return;
+        }
+
+        this.blockingButtons.forEach((button, index) => {
+            if (button) {
+                button.interactable = this.blockingButtonStates?.[index] ?? button.interactable;
+            }
+        });
+
+        this.blockingButtonStates = null;
     }
 }
