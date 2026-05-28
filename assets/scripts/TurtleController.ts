@@ -4,12 +4,12 @@ import {
     AudioSource,
     BoxCollider2D,
     Collider2D,
-    Color,
     Component,
     Contact2DType,
     ERigidBody2DType,
-    Graphics,
+    instantiate,
     Node,
+    Prefab,
     RigidBody2D,
     Size,
     Sprite,
@@ -19,20 +19,22 @@ import {
     Vec3,
     isValid,
 } from 'cc';
-import { EDITOR } from 'cc/env';
 import { PlayerController } from './PlayerController';
 import { ScoreHudText } from './ScoreHudText';
+import { TurtleShellController } from './TurtleShellController';
 
-const { ccclass, executeInEditMode, property } = _decorator;
+const { ccclass, property } = _decorator;
 
-@ccclass('GoombaController')
-@executeInEditMode
-export class GoombaController extends Component {
+@ccclass('TurtleController')
+export class TurtleController extends Component {
     @property
-    public moveSpeed = 50;
+    public moveSpeed = 45;
 
     @property
     public walkFrameInterval = 0.18;
+
+    @property([SpriteFrame])
+    public walkFrames: SpriteFrame[] = [];
 
     @property
     public startDirection = -1;
@@ -50,25 +52,46 @@ export class GoombaController extends Component {
     public waypointTolerance = 1;
 
     @property
-    public showColliderDebug = false;
-
-    @property(SpriteFrame)
-    public deadFrame: SpriteFrame | null = null;
-
-    @property
     public stompTolerance = 3;
 
     @property
-    public stompBounceSpeed = 180;
+    public stompMinTopRatio = 0.45;
 
     @property
-    public destroyBelowY = -300;
+    public stompBounceSpeed = 180;
 
     @property
     public stompScoreValue = 100;
 
     @property
     public shellDefeatBounceSpeed = 3;
+
+    @property(SpriteFrame)
+    public shellFrame: SpriteFrame | null = null;
+
+    @property([SpriteFrame])
+    public shellFrames: SpriteFrame[] = [];
+
+    @property
+    public shellSlideSpeed = 220;
+
+    @property
+    public shellMovingDamageMinSpeed = 0;
+
+    @property(Prefab)
+    public shellPrefab: Prefab | null = null;
+
+    @property(Vec2)
+    public turtleBodySize = new Vec2(14, 24);
+
+    @property(Vec2)
+    public turtleColliderOffset = new Vec2(0, -1);
+
+    @property(Vec2)
+    public shellBodySize = new Vec2(16, 16);
+
+    @property
+    public destroyBelowY = -300;
 
     @property(AudioClip)
     public stompSound: AudioClip | null = null;
@@ -80,27 +103,44 @@ export class GoombaController extends Component {
     private collider: BoxCollider2D | null = null;
     private sprite: Sprite | null = null;
     private sfxSource: AudioSource | null = null;
-    private colliderDebugNode: Node | null = null;
-    private walkElapsed = 0;
-    private mirrorFrame = false;
-    private baseVisualScaleX = 1;
     private moveDirection = -1;
-    private isDead = false;
-    private stompDeathQueued = false;
+    private walkElapsed = 0;
+    private walkFrameIndex = 0;
+    private baseVisualScaleX = 1;
+    private defeated = false;
+    private stompQueued = false;
     private pendingStompPlayer: PlayerController | null = null;
 
+    protected onLoad(): void {
+        this.moveDirection = this.normalizeDirection(this.startDirection);
+        this.setupComponents();
+    }
+
+    protected onDestroy(): void {
+        this.collider?.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+        this.pendingStompPlayer = null;
+    }
+
+    protected update(deltaTime: number): void {
+        if (this.defeated) {
+            this.destroyIfBelowScreen();
+            return;
+        }
+
+        this.updateDirectionFromWaypoints();
+        this.applyMovement();
+        this.updateWalkAnimation(deltaTime);
+    }
+
     public defeatByShell(): boolean {
-        if (this.isDead || this.stompDeathQueued) {
+        if (this.defeated || this.stompQueued) {
             return false;
         }
 
-        this.isDead = true;
+        this.defeated = true;
         this.collider?.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
         if (this.collider) {
             this.collider.enabled = false;
-        }
-        if (this.colliderDebugNode) {
-            this.colliderDebugNode.active = false;
         }
         if (this.body) {
             this.body.gravityScale = 1;
@@ -111,48 +151,18 @@ export class GoombaController extends Component {
         return true;
     }
 
-    protected onLoad(): void {
-        this.moveDirection = this.normalizeDirection(this.startDirection);
-        this.setupComponents();
-    }
-
-    protected onValidate(): void {
-        this.resolveCollider();
-        this.updateColliderDebug();
-    }
-
-    protected update(deltaTime: number): void {
-        if (EDITOR) {
-            this.resolveCollider();
-            this.updateColliderDebug();
-            return;
-        }
-
-        if (this.isDead) {
-            this.destroyIfBelowScreen();
-            return;
-        }
-
-        this.updateDirectionFromWaypoints();
-        this.applyMovement();
-        this.updateWalkMirrorAnimation(deltaTime);
-        this.updateColliderDebug();
-    }
-
-    protected onDestroy(): void {
-        this.collider?.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
-        this.pendingStompPlayer = null;
-    }
-
     private setupComponents(): void {
         this.sprite = this.node.getComponent(Sprite);
         if (!this.sprite) {
             this.sprite = this.node.addComponent(Sprite);
         }
+        this.applyCurrentWalkFrame();
 
         this.baseVisualScaleX = Math.abs(this.node.scale.x || 1);
 
-        this.ensureVisualTransform();
+        if (!this.node.getComponent(UITransform)) {
+            this.node.addComponent(UITransform);
+        }
 
         this.body = this.node.getComponent(RigidBody2D);
         if (!this.body) {
@@ -166,13 +176,6 @@ export class GoombaController extends Component {
         this.resolveCollider();
         this.setupSfxSource();
         this.registerContactListener();
-        this.updateColliderDebug();
-    }
-
-    private ensureVisualTransform(): void {
-        if (!this.node.getComponent(UITransform)) {
-            this.node.addComponent(UITransform);
-        }
     }
 
     private resolveCollider(): BoxCollider2D | null {
@@ -181,16 +184,17 @@ export class GoombaController extends Component {
         }
 
         this.collider = this.node.getComponent(BoxCollider2D);
-        if (!this.collider && !EDITOR) {
+        if (!this.collider) {
             this.collider = this.node.addComponent(BoxCollider2D);
-            this.collider.sensor = false;
-            this.collider.size = new Size(14, 14);
-            this.collider.offset = new Vec2(0, -5);
-            this.collider.density = 1;
-            this.collider.friction = 0;
-            this.collider.restitution = 0;
-            this.collider.apply();
         }
+
+        this.collider.sensor = false;
+        this.collider.size = new Size(this.turtleBodySize.x, this.turtleBodySize.y);
+        this.collider.offset = new Vec2(this.turtleColliderOffset.x, this.turtleColliderOffset.y);
+        this.collider.density = 1;
+        this.collider.friction = 0;
+        this.collider.restitution = 0;
+        this.collider.apply();
 
         return this.collider;
     }
@@ -205,7 +209,7 @@ export class GoombaController extends Component {
     }
 
     private onBeginContact(_selfCollider: Collider2D, otherCollider: Collider2D): void {
-        if (this.isDead || this.stompDeathQueued || otherCollider.sensor) {
+        if (this.defeated || this.stompQueued || otherCollider.sensor) {
             return;
         }
 
@@ -215,7 +219,7 @@ export class GoombaController extends Component {
         }
 
         if (this.isStompedBy(player)) {
-            this.queueStompDeath(player);
+            this.queueStomp(player);
             return;
         }
 
@@ -227,52 +231,82 @@ export class GoombaController extends Component {
             return false;
         }
 
-        const goombaTopY = this.node.worldPosition.y + this.collider.offset.y + this.collider.size.height * 0.5;
-        return player.getFootWorldY() >= goombaTopY - Math.max(this.stompTolerance, 0);
+        const turtleCenterY = this.node.worldPosition.y + this.collider.offset.y;
+        const turtleHeight = this.collider.size.height;
+        const turtleBottomY = turtleCenterY - turtleHeight * 0.5;
+        const stompLineY = turtleBottomY + turtleHeight * Math.min(Math.max(this.stompMinTopRatio, 0), 1);
+        return player.getFootWorldY() >= stompLineY - Math.max(this.stompTolerance, 0);
     }
 
-    private queueStompDeath(player: PlayerController): void {
-        if (this.isDead || this.stompDeathQueued) {
+    private queueStomp(player: PlayerController): void {
+        if (this.defeated || this.stompQueued) {
             return;
         }
 
-        this.stompDeathQueued = true;
+        this.stompQueued = true;
         this.pendingStompPlayer = player;
-        this.scheduleOnce(this.applyStompDeath, 0);
+        this.scheduleOnce(this.applyStomp, 0);
     }
 
-    private readonly applyStompDeath = (): void => {
-        if (this.isDead) {
+    private readonly applyStomp = (): void => {
+        if (this.defeated) {
             return;
         }
 
         const player = this.pendingStompPlayer;
         this.pendingStompPlayer = null;
-        this.isDead = true;
+        this.defeated = true;
         this.playSfx(this.stompSound);
         player?.bounceAfterStomp(this.stompBounceSpeed);
         if (player) {
             ScoreHudText.addToActiveScore(this.stompScoreValue, this.getScorePopupWorldPosition(player));
         }
 
-        if (this.sprite && this.deadFrame) {
-            this.sprite.spriteFrame = this.deadFrame;
-        }
-
-        this.collider?.off(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
-        if (this.collider) {
-            this.collider.enabled = false;
-        }
-        if (this.colliderDebugNode) {
-            this.colliderDebugNode.active = false;
-        }
-
-        if (this.body) {
-            this.body.gravityScale = 1;
-            this.body.fixedRotation = true;
-            this.setBodyVelocity(new Vec2(0, 0));
-        }
+        this.spawnShell();
+        this.node.destroy();
     };
+
+    private spawnShell(): void {
+        const shellNode = this.shellPrefab ? instantiate(this.shellPrefab) : new Node('TurtleShell');
+
+        let sprite = shellNode.getComponent(Sprite);
+        if (!sprite) {
+            sprite = shellNode.addComponent(Sprite);
+        }
+        if (this.shellFrame) {
+            sprite.spriteFrame = this.shellFrame;
+        }
+
+        let shell = shellNode.getComponent(TurtleShellController);
+        if (!shell) {
+            shell = shellNode.addComponent(TurtleShellController);
+        }
+        const shellFrames = this.resolveShellFrames();
+        if (shellFrames.length > 0) {
+            shell.shellFrames = shellFrames;
+        }
+        if (!this.shellPrefab) {
+            shell.slideSpeed = Math.abs(this.shellSlideSpeed);
+        }
+        shell.movingDamageMinSpeed = Math.max(this.shellMovingDamageMinSpeed, 0);
+        shell.bodySize = this.shellBodySize.clone();
+        shell.destroyBelowY = this.destroyBelowY;
+
+        const parent = this.node.parent;
+        if (parent) {
+            parent.addChild(shellNode);
+        }
+        shellNode.setWorldPosition(this.node.worldPosition);
+        shell.stopSliding();
+    }
+
+    private resolveShellFrames(): SpriteFrame[] {
+        if (this.shellFrames.length > 0) {
+            return this.shellFrames.filter((frame) => !!frame);
+        }
+
+        return this.shellFrame ? [this.shellFrame] : [];
+    }
 
     private getScorePopupWorldPosition(player: PlayerController): Vec3 {
         const position = player.node.worldPosition.clone();
@@ -296,11 +330,7 @@ export class GoombaController extends Component {
             this.setupSfxSource();
         }
 
-        this.sfxSource?.playOneShot(clip, this.normalizeSfxVolume(this.sfxVolume));
-    }
-
-    private normalizeSfxVolume(value: number): number {
-        return Math.max(value, 0);
+        this.sfxSource?.playOneShot(clip, Math.max(this.sfxVolume, 0));
     }
 
     private destroyIfBelowScreen(): void {
@@ -341,6 +371,34 @@ export class GoombaController extends Component {
         }
     }
 
+    private updateWalkAnimation(deltaTime: number): void {
+        const frameCount = Math.min(this.walkFrames.length, 2);
+        if (frameCount <= 0) {
+            return;
+        }
+
+        const interval = Math.max(this.walkFrameInterval, 0.01);
+        this.walkElapsed += deltaTime;
+        while (this.walkElapsed >= interval) {
+            this.walkElapsed -= interval;
+            this.walkFrameIndex = (this.walkFrameIndex + 1) % frameCount;
+            this.applyCurrentWalkFrame();
+        }
+
+        const scale = this.node.scale.clone();
+        scale.x = this.baseVisualScaleX * (this.moveDirection < 0 ? 1 : -1);
+        this.node.setScale(scale);
+    }
+
+    private applyCurrentWalkFrame(): void {
+        if (!this.sprite || this.walkFrames.length === 0) {
+            return;
+        }
+
+        const frameCount = Math.min(this.walkFrames.length, 2);
+        this.sprite.spriteFrame = this.walkFrames[this.walkFrameIndex % frameCount];
+    }
+
     private setBodyVelocity(velocity: Vec2): void {
         if (!this.body) {
             return;
@@ -360,75 +418,11 @@ export class GoombaController extends Component {
         bodyWithMethods.wakeUp?.();
     }
 
-    private updateWalkMirrorAnimation(deltaTime: number): void {
-        const interval = Math.max(this.walkFrameInterval, 0.01);
-        this.walkElapsed += deltaTime;
-
-        while (this.walkElapsed >= interval) {
-            this.walkElapsed -= interval;
-            this.mirrorFrame = !this.mirrorFrame;
-        }
-
-        const scale = this.node.scale.clone();
-        scale.x = this.baseVisualScaleX * (this.mirrorFrame ? -1 : 1);
-        this.node.setScale(scale);
-    }
-
     private normalizeDirection(direction: number): number {
         if (direction === 0) {
             return -1;
         }
 
         return direction < 0 ? -1 : 1;
-    }
-
-    private updateColliderDebug(): void {
-        if (!this.collider) {
-            if (this.colliderDebugNode) {
-                this.colliderDebugNode.active = false;
-            }
-            return;
-        }
-
-        let debugNode = this.colliderDebugNode;
-        if (!debugNode || !isValid(debugNode)) {
-            debugNode = this.node.getChildByName('GoombaColliderDebug');
-            if (!debugNode) {
-                debugNode = new Node('GoombaColliderDebug');
-                this.node.addChild(debugNode);
-            }
-            this.colliderDebugNode = debugNode;
-        }
-
-        debugNode.active = this.showColliderDebug;
-        if (!this.showColliderDebug) {
-            return;
-        }
-
-        debugNode.setPosition(this.collider.offset.x, this.collider.offset.y, 0);
-
-        let transform = debugNode.getComponent(UITransform);
-        if (!transform) {
-            transform = debugNode.addComponent(UITransform);
-        }
-        transform.setContentSize(this.collider.size.width, this.collider.size.height);
-
-        let graphics = debugNode.getComponent(Graphics);
-        if (!graphics) {
-            graphics = debugNode.addComponent(Graphics);
-        }
-
-        graphics.clear();
-        graphics.strokeColor = new Color(255, 180, 0, 255);
-        graphics.fillColor = new Color(255, 180, 0, 45);
-        graphics.lineWidth = 1;
-        graphics.rect(
-            -this.collider.size.width * 0.5,
-            -this.collider.size.height * 0.5,
-            this.collider.size.width,
-            this.collider.size.height,
-        );
-        graphics.fill();
-        graphics.stroke();
     }
 }
